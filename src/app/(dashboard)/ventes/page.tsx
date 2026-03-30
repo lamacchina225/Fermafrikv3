@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
+import { format, addDays, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useSession } from "next-auth/react";
 import { z } from "zod";
 import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Package,
   Phone,
   Plus,
-  Search,
   ShoppingCart,
   Trash2,
   UserPlus,
   X,
+  CheckCircle2,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
@@ -44,7 +44,6 @@ interface SaleRow {
   clientId?: number | null;
   clientName?: string | null;
   clientCity?: string | null;
-  clientPhone?: string | null;
 }
 
 interface ExpenseRow {
@@ -64,7 +63,7 @@ const saleFormSchema = z.object({
   unitPrice: z.coerce.number().min(1, "Prix invalide"),
   clientId: z.coerce.number().optional().nullable(),
   buyerName: z.string().optional(),
-  addExpense: z.boolean().default(false),
+  withExpense: z.boolean().default(false),
   expenseType: z.enum(["transport", "plateaux", "autre"]).optional(),
   expenseAmount: z.coerce.number().optional(),
   expenseNote: z.string().optional(),
@@ -90,14 +89,16 @@ export default function VentesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [buildingInfo, setBuildingInfo] = useState<BuildingInfo | null>(null);
   const [defaultPrice, setDefaultPrice] = useState(7000);
-  const [showSaleForm, setShowSaleForm] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [clientSearch, setClientSearch] = useState("");
-  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [withExpense, setWithExpense] = useState(false);
   const [isLoadingSales, setIsLoadingSales] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClientSubmitting, setIsClientSubmitting] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+
+  const formRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
@@ -108,10 +109,7 @@ export default function VentesPage() {
     formState: { errors },
   } = useForm<SaleFormData>({
     resolver: zodResolver(saleFormSchema),
-    defaultValues: {
-      unitPrice: defaultPrice,
-      addExpense: false,
-    },
+    defaultValues: { unitPrice: defaultPrice, withExpense: false },
   });
 
   const {
@@ -119,9 +117,7 @@ export default function VentesPage() {
     handleSubmit: handleClientSubmit,
     reset: resetClientForm,
     formState: { errors: clientErrors },
-  } = useForm<NewClientFormData>({
-    resolver: zodResolver(newClientSchema),
-  });
+  } = useForm<NewClientFormData>({ resolver: zodResolver(newClientSchema) });
 
   const loadSales = useCallback(async (date: string) => {
     setIsLoadingSales(true);
@@ -130,12 +126,11 @@ export default function VentesPage() {
         fetch(`/api/sales?date=${date}`),
         fetch(`/api/expenses?date=${date}`),
       ]);
-      const salesJson = await salesRes.json();
-      const expensesJson = await expensesRes.json();
+      const [salesJson, expensesJson] = await Promise.all([salesRes.json(), expensesRes.json()]);
       setSalesList(salesJson.sales ?? []);
       setLinkedExpenses(expensesJson.expenses ?? []);
     } catch {
-      toast.error("Erreur lors du chargement des ventes");
+      toast.error("Erreur lors du chargement");
     } finally {
       setIsLoadingSales(false);
     }
@@ -151,63 +146,45 @@ export default function VentesPage() {
     loadClients();
     fetch("/api/daily-records?info=true")
       .then((r) => r.json())
-      .then((json) => {
-        if (json.buildingId) setBuildingInfo(json);
-      });
+      .then((json) => { if (json.buildingId) setBuildingInfo(json); });
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((json) => {
-        if (json.prix_plaquette) setDefaultPrice(Number(json.prix_plaquette));
-      });
+      .then((json) => { if (json.prix_plaquette) setDefaultPrice(Number(json.prix_plaquette)); });
   }, [loadClients]);
 
-  useEffect(() => {
-    loadSales(selectedDate);
-  }, [loadSales, selectedDate]);
-
-  useEffect(() => {
-    setValue("unitPrice", defaultPrice);
-  }, [defaultPrice, setValue]);
+  useEffect(() => { loadSales(selectedDate); }, [loadSales, selectedDate]);
+  useEffect(() => { setValue("unitPrice", defaultPrice); }, [defaultPrice, setValue]);
 
   const traysSold = watch("traysSold") || 0;
   const unitPrice = watch("unitPrice") || defaultPrice;
-  const addExpense = watch("addExpense");
   const estimatedTotal = traysSold * unitPrice;
 
-  const filteredClients = useMemo(
-    () =>
-      clients.filter(
-        (client) =>
-          client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-          (client.city && client.city.toLowerCase().includes(clientSearch.toLowerCase())) ||
-          (client.phone && client.phone.includes(clientSearch))
-      ),
-    [clientSearch, clients]
-  );
+  const totalTrays = salesList.reduce((s, v) => s + v.traysSold, 0);
+  const totalSalesAmount = salesList.reduce((s, v) => s + Number(v.totalAmount), 0);
+  const totalExpensesAmount = linkedExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const netAmount = totalSalesAmount - totalExpensesAmount;
 
-  const totalTrays = salesList.reduce((sum, sale) => sum + sale.traysSold, 0);
-  const totalSalesAmount = salesList.reduce(
-    (sum, sale) => sum + Number(sale.totalAmount),
-    0
-  );
-  const totalExpensesAmount = linkedExpenses.reduce(
-    (sum, expense) => sum + Number(expense.amount),
-    0
-  );
+  const navigate = (dir: 1 | -1) => {
+    const d = new Date(`${selectedDate}T00:00:00`);
+    setSelectedDate(format(dir === 1 ? addDays(d, 1) : subDays(d, 1), "yyyy-MM-dd"));
+  };
 
-  const resetInlineForm = () => {
-    setShowSaleForm(false);
+  const resetForm = () => {
+    setShowForm(false);
     setShowNewClientForm(false);
     setSelectedClient(null);
-    setClientSearch("");
-    setExpenseOpen(false);
-    resetSaleForm({ unitPrice: defaultPrice, addExpense: false });
+    setWithExpense(false);
+    resetSaleForm({ unitPrice: defaultPrice, withExpense: false });
+  };
+
+  const openForm = () => {
+    setShowForm(true);
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
 
   const onSubmitSale = async (formData: SaleFormData) => {
     if (readonly || !buildingInfo) return;
     setIsSubmitting(true);
-
     try {
       const body: Record<string, unknown> = {
         buildingId: buildingInfo.buildingId,
@@ -215,36 +192,24 @@ export default function VentesPage() {
         saleDate: selectedDate,
         traysSold: formData.traysSold,
         unitPrice: formData.unitPrice,
-        clientId: formData.clientId ?? null,
-        buyerName: formData.buyerName || null,
+        clientId: selectedClient?.id ?? null,
+        buyerName: selectedClient?.name ?? formData.buyerName ?? null,
       };
-
-      if (
-        formData.addExpense &&
-        formData.expenseType &&
-        formData.expenseAmount &&
-        formData.expenseAmount > 0
-      ) {
+      if (withExpense && formData.expenseType && formData.expenseAmount && formData.expenseAmount > 0) {
         body.linkedExpense = {
           type: formData.expenseType,
           amount: formData.expenseAmount,
           note: formData.expenseNote || undefined,
         };
       }
-
       const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error ?? "Erreur serveur");
-      }
-
-      toast.success("Vente enregistree");
-      resetInlineForm();
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur serveur");
+      toast.success("Vente enregistrée");
+      resetForm();
       await loadSales(selectedDate);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur");
@@ -256,27 +221,20 @@ export default function VentesPage() {
   const onCreateClient = async (formData: NewClientFormData) => {
     if (readonly) return;
     setIsClientSubmitting(true);
-
     try {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error ?? "Erreur serveur");
-      }
-
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur serveur");
       const { client } = await res.json();
       await loadClients();
       setSelectedClient(client);
       setValue("clientId", client.id);
-      setValue("buyerName", client.name);
       setShowNewClientForm(false);
       resetClientForm();
-      toast.success("Client cree");
+      toast.success("Client créé");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur");
     } finally {
@@ -285,355 +243,366 @@ export default function VentesPage() {
   };
 
   const handleDelete = async (saleId: number) => {
-    if (!userIsAdmin || !confirm("Supprimer cette vente ?")) return;
     try {
       const res = await fetch(`/api/sales/${saleId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error ?? "Erreur serveur");
-      }
-      toast.success("Vente supprimee");
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur serveur");
+      toast.success("Vente supprimée");
+      setDeleteConfirmId(null);
       await loadSales(selectedDate);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur");
     }
   };
 
-  const dateLabel = format(new Date(`${selectedDate}T00:00:00`), "EEEE d MMMM yyyy", {
-    locale: fr,
-  });
+  const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
+  const dateLabel = format(new Date(`${selectedDate}T00:00:00`), "EEEE d MMMM yyyy", { locale: fr });
 
   return (
     <div>
       <Header
-        title="Ventes du jour"
+        title="Ventes"
         username={session?.user?.name ?? undefined}
         userRole={session?.user?.role}
       />
-      <div className="p-4 md:p-6 space-y-5">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col lg:flex-row lg:items-end gap-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Date de vente</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
+      <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
+
+        {/* Navigation date */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1 text-center">
+            <p className="text-sm font-semibold text-slate-900 capitalize">{dateLabel}</p>
           </div>
-          <div className="text-sm text-slate-500 capitalize">{dateLabel}</div>
-          <div className="lg:ml-auto flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedDate(format(new Date(), "yyyy-MM-dd"));
-              }}
+          <button
+            onClick={() => navigate(1)}
+            disabled={isToday}
+            className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          {!isToday && (
+            <button
+              onClick={() => setSelectedDate(format(new Date(), "yyyy-MM-dd"))}
+              className="text-xs font-medium text-amber-600 hover:underline whitespace-nowrap"
             >
-              Aujourd hui
-            </Button>
-            {!readonly && (
-              <Button
-                className="bg-amber-500 hover:bg-amber-600 text-white"
-                onClick={() => {
-                  setShowSaleForm((value) => !value);
-                  setSelectedClient(null);
-                  setClientSearch("");
-                  setExpenseOpen(false);
-                  resetSaleForm({ unitPrice: defaultPrice, addExpense: false });
-                }}
+              Aujourd'hui
+            </button>
+          )}
+        </div>
+
+        {/* Métriques */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-3 text-center">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Plaquettes</p>
+            <p className="text-xl font-bold text-slate-900">{totalTrays}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-3 text-center">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Montant</p>
+            <p className="text-xl font-bold text-slate-900">{formatXOF(totalSalesAmount)}</p>
+          </div>
+          <div className={`rounded-xl border shadow-sm p-3 text-center ${netAmount >= 0 ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Net</p>
+            <p className={`text-xl font-bold ${netAmount >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatXOF(netAmount)}</p>
+          </div>
+        </div>
+
+        {/* Formulaire nouvelle vente */}
+        {!readonly && (
+          <div ref={formRef}>
+            {!showForm ? (
+              <button
+                onClick={openForm}
+                className="w-full flex items-center justify-center gap-2 p-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-semibold text-sm shadow-sm transition-colors"
               >
-                <Plus className="h-4 w-4" />
-                Saisir une vente
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <MetricCard label="Plaquettes du jour" value={String(totalTrays)} />
-          <MetricCard label="Montant vendu" value={formatXOF(totalSalesAmount)} />
-          <MetricCard label="Depenses liees" value={formatXOF(totalExpensesAmount)} />
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-900">Saisie des ventes de la journee</h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Prix par defaut : {formatXOF(defaultPrice)} par plaquette. Vous pouvez creer
-              un client et ajouter un cout de transport ou de plaquettes.
-            </p>
-          </div>
-
-          {showSaleForm && !readonly && (
-            <div className="border-b border-amber-100 bg-amber-50/40 p-5">
-              <form onSubmit={handleSubmit(onSubmitSale)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label required>Plaquettes vendues</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="0"
-                      {...register("traysSold")}
-                      error={errors.traysSold?.message}
-                    />
+                <Plus className="h-5 w-5" />
+                Nouvelle vente
+              </button>
+            ) : (
+              <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-amber-100 bg-amber-50/50">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4 text-amber-600" />
+                    <h2 className="font-semibold text-slate-900">Nouvelle vente</h2>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label required>Prix par plaquette (XOF)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder={String(defaultPrice)}
-                      {...register("unitPrice")}
-                      error={errors.unitPrice?.message}
-                    />
-                  </div>
+                  <button onClick={resetForm} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
 
-                {estimatedTotal > 0 && (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                    <div>
-                      <p className="font-semibold text-emerald-800">
-                        {formatXOF(estimatedTotal)}
-                      </p>
-                      <p className="text-xs text-emerald-600">
-                        {traysSold} plaquettes pour {traysSold * 30} oeufs
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <form onSubmit={handleSubmit(onSubmitSale)} className="p-5 space-y-5">
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Client</Label>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewClientForm((value) => !value)}
-                      className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700"
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      Nouveau client
-                    </button>
-                  </div>
-
-                  {showNewClientForm && (
-                    <div className="border border-amber-200 rounded-xl bg-amber-50 p-4 space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label required>Nom</Label>
-                          <Input {...registerClient("name")} error={clientErrors.name?.message} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Ville</Label>
-                          <Input {...registerClient("city")} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Telephone</Label>
-                          <Input {...registerClient("phone")} />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" onClick={() => setShowNewClientForm(false)}>
-                          Annuler
-                        </Button>
-                        <Button
-                          type="button"
-                          className="bg-amber-500 hover:bg-amber-600 text-white"
-                          loading={isClientSubmitting}
-                          onClick={handleClientSubmit(onCreateClient)}
-                        >
-                          Creer le client
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedClient ? (
-                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-900">{selectedClient.name}</p>
-                        {selectedClient.city && (
-                          <p className="text-xs text-slate-500">{selectedClient.city}</p>
-                        )}
-                        {selectedClient.phone && (
-                          <a
-                            href={`tel:${selectedClient.phone}`}
-                            className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 bg-amber-500 text-white rounded-lg text-xs font-medium"
-                          >
-                            <Phone className="h-3 w-3" />
-                            {selectedClient.phone}
-                          </a>
-                        )}
-                      </div>
+                  {/* Client */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Client</Label>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedClient(null);
-                          setValue("clientId", undefined);
-                          setValue("buyerName", "");
-                        }}
+                        onClick={() => setShowNewClientForm((v) => !v)}
+                        className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700"
                       >
-                        <X className="h-4 w-4 text-slate-400" />
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Nouveau client
                       </button>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                          type="text"
-                          value={clientSearch}
-                          onChange={(e) => setClientSearch(e.target.value)}
-                          placeholder="Rechercher un client..."
-                          className="pl-9"
-                        />
-                      </div>
 
-                      {clientSearch ? (
-                        <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white">
-                          {filteredClients.length === 0 ? (
-                            <p className="p-3 text-sm text-slate-400 text-center">
-                              Aucun client trouve
-                            </p>
-                          ) : (
-                            filteredClients.map((client) => (
-                              <button
-                                key={client.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedClient(client);
-                                  setValue("clientId", client.id);
-                                  setValue("buyerName", client.name);
-                                  setClientSearch("");
-                                }}
-                                className="w-full p-3 text-left hover:bg-slate-50"
-                              >
-                                <p className="font-medium text-slate-900 text-sm">{client.name}</p>
-                                <p className="text-xs text-slate-400">
-                                  {[client.city, client.phone].filter(Boolean).join(" | ")}
-                                </p>
-                              </button>
-                            ))
-                          )}
+                    {/* Formulaire nouveau client */}
+                    {showNewClientForm && (
+                      <div className="border border-amber-200 rounded-xl bg-amber-50/60 p-4 space-y-3">
+                        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Créer un client</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label required>Nom</Label>
+                            <Input {...registerClient("name")} placeholder="Ex: Amadou Diallo" error={clientErrors.name?.message} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Ville</Label>
+                            <Input {...registerClient("city")} placeholder="Ex: Dakar" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Téléphone</Label>
+                            <Input {...registerClient("phone")} placeholder="Ex: 77 000 00 00" />
+                          </div>
                         </div>
-                      ) : (
-                        <Input
-                          type="text"
-                          placeholder="Ou saisir un nom libre..."
-                          {...register("buyerName")}
-                        />
-                      )}
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setShowNewClientForm(false); resetClientForm(); }}>
+                            Annuler
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-amber-500 hover:bg-amber-600 text-white"
+                            loading={isClientSubmitting}
+                            onClick={handleClientSubmit(onCreateClient)}
+                          >
+                            Créer
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sélection client */}
+                    {selectedClient ? (
+                      <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200">
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">{selectedClient.name}</p>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            {selectedClient.city && (
+                              <p className="text-xs text-slate-500">{selectedClient.city}</p>
+                            )}
+                            {selectedClient.phone && (
+                              <a
+                                href={`tel:${selectedClient.phone}`}
+                                className="inline-flex items-center gap-1 text-xs text-amber-700 font-medium"
+                              >
+                                <Phone className="h-3 w-3" />
+                                {selectedClient.phone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedClient(null); setValue("clientId", undefined); }}
+                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-400"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        onChange={(e) => {
+                          const id = parseInt(e.target.value);
+                          if (!isNaN(id)) {
+                            const c = clients.find((cl) => cl.id === id) ?? null;
+                            setSelectedClient(c);
+                            setValue("clientId", id);
+                          }
+                        }}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        defaultValue=""
+                      >
+                        <option value="">— Choisir un client —</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}{c.city ? ` | ${c.city}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Quantité + prix */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label required>Plaquettes vendues</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="0"
+                        {...register("traysSold")}
+                        error={errors.traysSold?.message}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label required>Prix / plaquette (XOF)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        {...register("unitPrice")}
+                        error={errors.unitPrice?.message}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total estimé */}
+                  {estimatedTotal > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <div>
+                        <p className="font-bold text-emerald-800 text-lg">{formatXOF(estimatedTotal)}</p>
+                        <p className="text-xs text-emerald-600">{traysSold} plaquettes · {traysSold * 30} œufs</p>
+                      </div>
                     </div>
                   )}
-                </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpenseOpen((value) => !value)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 text-sm font-medium text-slate-700"
-                  >
-                    <span className="flex items-center gap-2">
+                  {/* Dépense liée */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <label className="flex items-center gap-3 px-4 py-3 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={withExpense}
+                        onChange={(e) => setWithExpense(e.target.checked)}
+                        className="rounded"
+                      />
                       <Package className="h-4 w-4 text-slate-500" />
-                      Ajouter une depense liee a cette vente
-                    </span>
-                    {expenseOpen ? (
-                      <ChevronUp className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    )}
-                  </button>
-                  {expenseOpen && (
-                    <div className="p-4 space-y-3 bg-white">
-                      <label className="flex items-center gap-2 text-sm text-slate-700">
-                        <input type="checkbox" {...register("addExpense")} />
-                        Enregistrer transport, plaquettes ou autre cout
-                      </label>
-                      {addExpense && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <span className="text-sm font-medium text-slate-700">Ajouter une dépense liée (transport, plaquettes…)</span>
+                    </label>
+                    {withExpense && (
+                      <div className="p-4 space-y-3 bg-white border-t border-slate-100">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="space-y-1">
                             <Label required>Type</Label>
                             <select
                               {...register("expenseType")}
                               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                             >
-                              <option value="">Choisir...</option>
+                              <option value="">Choisir…</option>
                               <option value="transport">Transport</option>
                               <option value="plateaux">Plaquettes</option>
                               <option value="autre">Autre</option>
                             </select>
                           </div>
                           <div className="space-y-1">
-                            <Label required>Montant</Label>
-                            <Input type="number" min="1" {...register("expenseAmount")} />
+                            <Label required>Montant (XOF)</Label>
+                            <Input type="number" min="1" placeholder="0" {...register("expenseAmount")} />
                           </div>
                           <div className="space-y-1">
                             <Label>Note</Label>
-                            <Input type="text" {...register("expenseNote")} />
+                            <Input type="text" placeholder="Optionnel" {...register("expenseNote")} />
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" className="flex-1" onClick={resetInlineForm}>
-                    Annuler
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
-                    loading={isSubmitting}
-                  >
-                    Enregistrer
-                  </Button>
-                </div>
-              </form>
-            </div>
-          )}
+                  {/* Boutons */}
+                  <div className="flex gap-3">
+                    <Button type="button" variant="outline" className="flex-1" onClick={resetForm}>
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                      loading={isSubmitting}
+                    >
+                      Enregistrer
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Liste des ventes */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-900">Ventes du jour</h2>
+            {totalTrays > 0 && (
+              <span className="text-xs text-slate-400">{salesList.length} vente{salesList.length > 1 ? "s" : ""}</span>
+            )}
+          </div>
 
           {isLoadingSales ? (
-            <div className="p-8 text-center text-slate-400">Chargement...</div>
+            <div className="p-8 text-center text-slate-400 text-sm">Chargement…</div>
           ) : salesList.length === 0 ? (
-            <div className="py-14 text-center">
-              <ShoppingCart className="h-11 w-11 text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-500 font-medium">Aucune vente pour cette journee</p>
+            <div className="py-12 text-center">
+              <ShoppingCart className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm">Aucune vente pour cette journée</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
               {salesList.map((sale) => {
                 const clientName = sale.clientName || sale.buyerName;
                 return (
-                  <div key={sale.id} className="px-5 py-4 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
+                  <div key={sale.id} className="px-5 py-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                      <TrendingUp className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-slate-900">
                           {sale.traysSold} plaquette{sale.traysSold > 1 ? "s" : ""}
                         </span>
                         <span className="text-xs text-slate-400">
                           {formatXOF(Number(sale.unitPrice))}/plq
                         </span>
-                        <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
                           {formatXOF(Number(sale.totalAmount))}
                         </span>
                       </div>
                       {clientName && (
-                        <p className="text-sm text-slate-500 mt-1">
-                          {clientName}
-                          {sale.clientCity ? ` | ${sale.clientCity}` : ""}
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {clientName}{sale.clientCity ? ` · ${sale.clientCity}` : ""}
                         </p>
                       )}
                     </div>
                     {userIsAdmin && (
-                      <button
-                        onClick={() => handleDelete(sale.id)}
-                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                        title="Supprimer cette vente"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {deleteConfirmId === sale.id ? (
+                          <>
+                            <button
+                              onClick={() => handleDelete(sale.id)}
+                              className="text-xs text-red-600 font-semibold hover:underline"
+                            >
+                              Confirmer
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="text-xs text-slate-400 hover:underline ml-2"
+                            >
+                              Annuler
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(sale.id)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -642,38 +611,26 @@ export default function VentesPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-900">Depenses rattachees a la journee</h3>
-          </div>
-          {linkedExpenses.length === 0 ? (
-            <div className="p-5 text-sm text-slate-400">Aucune depense enregistree pour cette date.</div>
-          ) : (
+        {/* Dépenses liées */}
+        {linkedExpenses.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900">Dépenses liées</h3>
+            </div>
             <div className="divide-y divide-slate-100">
               {linkedExpenses.map((expense) => (
-                <div key={expense.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                <div key={expense.id} className="px-5 py-3.5 flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-slate-900">{expense.label}</p>
-                    <p className="text-xs text-slate-400">{expense.category}</p>
+                    <p className="text-sm font-medium text-slate-900">{expense.label}</p>
+                    <p className="text-xs text-slate-400 capitalize">{expense.category}</p>
                   </div>
-                  <p className="font-semibold text-slate-900">
-                    {formatXOF(Number(expense.amount))}
-                  </p>
+                  <p className="font-semibold text-slate-700 text-sm">{formatXOF(Number(expense.amount))}</p>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-center">
-      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
     </div>
   );
 }

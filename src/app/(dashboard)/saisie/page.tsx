@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import {
@@ -17,6 +18,9 @@ import {
   ChevronUp,
   Save,
   Calendar,
+  Pencil,
+  Trash2,
+  History,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -30,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { canWrite } from "@/lib/utils";
+import { canWrite, formatNumber } from "@/lib/utils";
 
 const saisieSchema = z.object({
   recordDate: z.string().min(1, "La date est requise"),
@@ -57,6 +61,18 @@ interface Section {
   color: string;
 }
 
+interface RecentRecord {
+  id: number;
+  recordDate: string;
+  eggsCollected: number;
+  eggsBroken: number;
+  mortalityCount: number;
+  mortalityCause: string | null;
+  feedQuantityKg: string | null;
+  feedType: string | null;
+  feedCost: string | null;
+}
+
 const sections: Section[] = [
   { id: "oeufs", title: "Oeufs & Récolte", icon: Egg, color: "yellow" },
   { id: "troupeau", title: "Troupeau & Mortalité", icon: AlertTriangle, color: "red" },
@@ -72,7 +88,7 @@ const colorMap: Record<string, { bg: string; icon: string; border: string }> = {
 };
 
 export default function SaisiePage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [openSections, setOpenSections] = useState<string[]>(["oeufs"]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [buildingInfo, setBuildingInfo] = useState<{
@@ -80,8 +96,12 @@ export default function SaisiePage() {
     cycleId: number;
     buildingName: string;
   } | null>(null);
+  const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const readonly = !canWrite(session?.user?.role);
+  // Le bouton n'est masqué QUE si la session est chargée et que le rôle est demo
+  const readonly = status !== "loading" && !canWrite(session?.user?.role);
 
   const {
     register,
@@ -102,7 +122,20 @@ export default function SaisiePage() {
     },
   });
 
-  // Charger infos bâtiment/cycle
+  const fetchRecent = useCallback(async () => {
+    try {
+      const res = await fetch("/api/daily-records?recent=true");
+      const data = await res.json();
+      if (data.records) {
+        const sorted = [...data.records].sort((a, b) =>
+          b.recordDate.localeCompare(a.recordDate)
+        );
+        setRecentRecords(sorted);
+      }
+    } catch {}
+  }, []);
+
+  // Charger infos bâtiment/cycle + saisies récentes
   useEffect(() => {
     fetch("/api/daily-records?info=true")
       .then((r) => r.json())
@@ -112,7 +145,8 @@ export default function SaisiePage() {
         }
       })
       .catch(() => {});
-  }, []);
+    fetchRecent();
+  }, [fetchRecent]);
 
   const toggleSection = (sectionId: string) => {
     setOpenSections((prev) =>
@@ -120,6 +154,34 @@ export default function SaisiePage() {
         ? prev.filter((s) => s !== sectionId)
         : [...prev, sectionId]
     );
+  };
+
+  const handleEditSetup = (rec: RecentRecord) => {
+    setValue("recordDate", rec.recordDate);
+    setValue("eggsCollected", rec.eggsCollected);
+    setValue("eggsBroken", rec.eggsBroken);
+    setValue("mortalityCount", rec.mortalityCount);
+    setValue("mortalityCause", rec.mortalityCause ?? "");
+    setValue("feedQuantityKg", Number(rec.feedQuantityKg ?? 0));
+    setValue("feedCost", Number(rec.feedCost ?? 0));
+    setOpenSections(["oeufs", "troupeau", "alimentation"]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    toast.info(`Édition du ${format(new Date(rec.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })}`);
+  };
+
+  const handleDelete = async (id: number) => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/daily-records/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erreur lors de la suppression");
+      toast.success("Saisie supprimée");
+      setDeleteConfirmId(null);
+      await fetchRecent();
+    } catch {
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const onSubmit = async (data: SaisieFormData) => {
@@ -149,7 +211,8 @@ export default function SaisiePage() {
         throw new Error(err.error ?? "Erreur lors de la sauvegarde");
       }
 
-      toast.success("Saisie enregistrée avec succès !");
+      const result = await response.json();
+      toast.success(result.updated ? "Saisie mise à jour !" : "Saisie enregistrée !");
 
       // Ajouter dépense si renseignée
       if (data.expenseLabel && data.expenseAmount && data.expenseAmount > 0) {
@@ -167,6 +230,17 @@ export default function SaisiePage() {
         });
         toast.success("Dépense enregistrée !");
       }
+
+      reset({
+        recordDate: format(new Date(), "yyyy-MM-dd"),
+        eggsCollected: 0,
+        eggsBroken: 0,
+        mortalityCount: 0,
+        feedQuantityKg: 0,
+        feedCost: 0,
+      });
+      setOpenSections(["oeufs"]);
+      await fetchRecent();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     } finally {
@@ -181,9 +255,8 @@ export default function SaisiePage() {
         username={session?.user?.name ?? undefined}
         userRole={session?.user?.role}
       />
-      {/* Bandeau descriptif */}
       <div className="p-6 max-w-3xl mx-auto">
-        {readonly && (
+        {readonly && status !== "loading" && (
           <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl">
             <p className="text-orange-700 text-sm font-medium">
               Mode démo : consultation uniquement. Aucune modification possible.
@@ -444,7 +517,7 @@ export default function SaisiePage() {
           {!readonly && (
             <Button
               type="submit"
-              className="w-full h-12 text-base"
+              className="w-full h-12 text-base bg-amber-500 hover:bg-amber-600 text-white"
               loading={isSubmitting}
             >
               <Save className="h-5 w-5" />
@@ -452,6 +525,101 @@ export default function SaisiePage() {
             </Button>
           )}
         </form>
+
+        {/* Historique des 14 dernières saisies */}
+        {recentRecords.length > 0 && (
+          <div className="mt-8 space-y-3">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-slate-500" />
+              <h3 className="font-semibold text-slate-900">Saisies récentes</h3>
+              <span className="text-xs text-slate-400">(14 dernières)</span>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-xs border-b border-slate-100">
+                      <th className="text-left px-4 py-2.5 font-medium">Date</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Oeufs</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Cassés</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Mort.</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Alim. (kg)</th>
+                      {!readonly && (
+                        <th className="px-4 py-2.5 text-right font-medium">Actions</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentRecords.map((rec) => (
+                      <tr key={rec.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap capitalize">
+                          {format(new Date(rec.recordDate + "T00:00:00"), "EEE d MMM yyyy", { locale: fr })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium text-slate-800">
+                          {formatNumber(rec.eggsCollected)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-slate-500">
+                          {rec.eggsBroken || "–"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {rec.mortalityCount > 0
+                            ? <span className="text-rose-600 font-medium">{rec.mortalityCount}</span>
+                            : <span className="text-slate-400">–</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-slate-500">
+                          {Number(rec.feedQuantityKg ?? 0) > 0 ? Number(rec.feedQuantityKg) : "–"}
+                        </td>
+                        {!readonly && (
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSetup(rec)}
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Modifier
+                              </button>
+                              <span className="text-slate-200">|</span>
+                              {deleteConfirmId === rec.id ? (
+                                <span className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(rec.id)}
+                                    disabled={isDeleting}
+                                    className="text-xs text-red-600 font-semibold hover:underline"
+                                  >
+                                    Confirmer
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    className="text-xs text-slate-500 hover:underline"
+                                  >
+                                    Annuler
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmId(rec.id)}
+                                  className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  Supprimer
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

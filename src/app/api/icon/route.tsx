@@ -9,6 +9,9 @@ export async function GET(req: NextRequest) {
     Math.max(32, parseInt(req.nextUrl.searchParams.get("size") ?? "192"))
   );
 
+  const baseUrl = new URL(req.url).origin;
+  const logoUrl = `${baseUrl}/logo.png`;
+
   return new ImageResponse(
     (
       <div
@@ -17,27 +20,18 @@ export async function GET(req: NextRequest) {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: size > 64 ? 8 : 0,
           borderRadius: size * 0.18 + "px",
+          padding: size * 0.1 + "px",
         }}
       >
-        <div style={{ fontSize: size * 0.48, lineHeight: 1 }}>🐔</div>
-        {size >= 128 && (
-          <div
-            style={{
-              fontSize: size * 0.11,
-              color: "white",
-              fontWeight: "bold",
-              letterSpacing: "-0.02em",
-              fontFamily: "system-ui, sans-serif",
-            }}
-          >
-            Ferm&apos;Afrik
-          </div>
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logoUrl}
+          alt="Ferm'Afrik"
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        />
       </div>
     ),
     { width: size, height: size }

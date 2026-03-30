@@ -7,7 +7,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   ShoppingCart,
-  Package,
+  Users,
   MoreHorizontal,
   Heart,
   BarChart3,
@@ -22,7 +22,7 @@ const mainNav = [
   { href: "/", label: "Accueil", icon: LayoutDashboard },
   { href: "/saisie", label: "Production", icon: ClipboardList },
   { href: "/ventes", label: "Ventes", icon: ShoppingCart },
-  { href: "/stocks", label: "Stocks", icon: Package },
+  { href: "/stocks", label: "Clients", icon: Users },
 ];
 
 const moreNav = [

@@ -2,7 +2,7 @@
 
 import type { ElementType } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
+import { format, subDays } from "date-fns";
 import { useSession } from "next-auth/react";
 import {
   CalendarRange,
@@ -63,7 +63,7 @@ export default function RapportsPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch("/api/daily-records?report=true&days=all")
+    fetch("/api/daily-records?report=true&days=all", { cache: "no-store" })
       .then((r) => r.json())
       .then((json) => {
         setData(json);
@@ -225,8 +225,13 @@ export default function RapportsPage() {
   const applyPreset = (preset: "month" | "last7" | "last30" | "all") => {
     const today = new Date();
     if (preset === "month") {
-      setStartDate(format(startOfMonth(today), "yyyy-MM-dd"));
-      setEndDate(format(endOfMonth(today), "yyyy-MM-dd"));
+      const day = today.getDate();
+      const start = day >= 18
+        ? new Date(today.getFullYear(), today.getMonth(), 18)
+        : new Date(today.getFullYear(), today.getMonth() - 1, 18);
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 17);
+      setStartDate(format(start, "yyyy-MM-dd"));
+      setEndDate(format(end, "yyyy-MM-dd"));
       return;
     }
     if (preset === "last7") {

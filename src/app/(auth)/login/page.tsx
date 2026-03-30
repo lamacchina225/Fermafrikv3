@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Bird, Eye, EyeOff, Lock, User } from "lucide-react";
+import Image from "next/image";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,10 +61,16 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl mb-4 shadow-lg">
-            <Bird className="h-12 w-12 text-white" />
+          <div className="inline-flex items-center justify-center mb-4">
+            <Image
+              src="/logo.png"
+              alt="Ferm'Afrik"
+              width={160}
+              height={160}
+              className="drop-shadow-xl"
+              priority
+            />
           </div>
-          <h1 className="text-3xl font-bold text-white">Ferm&apos;Afrik</h1>
           <p className="text-white/70 mt-1 text-sm">Gestion de ferme avicole</p>
         </div>
 
@@ -138,15 +145,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Infos de démo */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-100">
-            <p className="text-xs font-medium text-gray-600 mb-2">Comptes disponibles :</p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <p><span className="font-medium text-gray-700">admin</span> / 290686 — Administrateur</p>
-              <p><span className="font-medium text-gray-700">gestion</span> / gestion — Gestionnaire</p>
-              <p><span className="font-medium text-gray-700">demo</span> / demo — Lecture seule</p>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-white/50 text-xs mt-6">

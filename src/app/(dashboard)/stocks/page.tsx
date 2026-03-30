@@ -1,341 +1,338 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
-import { toast } from "sonner";
 import { useSession } from "next-auth/react";
-import { Package, Plus, ArrowUp, ArrowDown, Egg } from "lucide-react";
+import {
+  MapPin,
+  Phone,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  X,
+  Check,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { formatXOF, formatDateShort, canWrite, getFeedTypeLabel } from "@/lib/utils";
-import type { FeedStockEntry } from "@/types";
+import { canWrite } from "@/lib/utils";
 
-const feedStockSchema = z.object({
-  movementDate: z.string().min(1, "La date est requise"),
-  movementType: z.enum(["in", "out"]),
-  quantityKg: z.coerce.number().min(0.1, "Quantité invalide"),
-  unitCost: z.coerce.number().min(0).optional(),
-  feedType: z.enum(["demarrage", "croissance", "ponte"]),
-  notes: z.string().optional(),
-});
-
-type FeedStockFormData = z.infer<typeof feedStockSchema>;
-
-interface StockSummary {
-  totalEggs: number;
-  totalBroken: number;
-  totalSoldEggs: number;
-  stockOeufs: number;
-  stockPlaquettes: number;
+interface Client {
+  id: number;
+  name: string;
+  city?: string | null;
+  phone?: string | null;
 }
 
-export default function StocksPage() {
-  const { data: session } = useSession();
-  const [feedEntries, setFeedEntries] = useState<FeedStockEntry[]>([]);
-  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [buildingInfo, setBuildingInfo] = useState<{ buildingId: number } | null>(null);
+const clientSchema = z.object({
+  name: z.string().min(1, "Le nom est requis"),
+  city: z.string().optional(),
+  phone: z.string().optional(),
+});
+type ClientFormData = z.infer<typeof clientSchema>;
 
+export default function ClientsPage() {
+  const { data: session } = useSession();
   const readonly = !canWrite(session?.user?.role);
 
-  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FeedStockFormData>({
-    resolver: zodResolver(feedStockSchema),
-    defaultValues: {
-      movementDate: format(new Date(), "yyyy-MM-dd"),
-      movementType: "in",
-      feedType: "ponte",
-    },
-  });
+  const [clients, setClients] = useState<Client[]>([]);
+  const [search, setSearch] = useState("");
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editData, setEditData] = useState<Partial<ClientFormData>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [stockRes, summaryRes] = await Promise.all([
-        fetch("/api/stocks"),
-        fetch("/api/stocks?summary=true"),
-      ]);
-      const stockData = await stockRes.json();
-      const summaryData = await summaryRes.json();
-      setFeedEntries(stockData.entries ?? []);
-      setStockSummary(summaryData);
-    } catch {
-      toast.error("Erreur de chargement");
-    } finally {
-      setIsLoading(false);
-    }
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ClientFormData>({ resolver: zodResolver(clientSchema) });
+
+  const loadClients = useCallback(async () => {
+    const res = await fetch("/api/clients");
+    const json = await res.json();
+    setClients(json.clients ?? []);
   }, []);
 
-  useEffect(() => {
-    loadData();
-    fetch("/api/daily-records?info=true")
-      .then((r) => r.json())
-      .then((d) => { if (d.buildingId) setBuildingInfo({ buildingId: d.buildingId }); });
-  }, [loadData]);
+  useEffect(() => { loadClients(); }, [loadClients]);
 
-  const onSubmit = async (data: FeedStockFormData) => {
-    if (readonly || !buildingInfo) return;
+  const filteredClients = clients.filter((c) => {
+    const q = search.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.city ?? "").toLowerCase().includes(q) ||
+      (c.phone ?? "").includes(q)
+    );
+  });
+
+  const onCreateClient = async (data: ClientFormData) => {
     setIsSubmitting(true);
     try {
-      const totalCost = data.unitCost ? data.unitCost * data.quantityKg : undefined;
-      const res = await fetch("/api/stocks", {
+      const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, buildingId: buildingInfo.buildingId, totalCost }),
+        body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("Mouvement stock enregistré !");
-      setIsDialogOpen(false);
-      reset({ movementDate: format(new Date(), "yyyy-MM-dd"), movementType: "in", feedType: "ponte" });
-      loadData();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur");
+      toast.success("Client créé");
+      reset();
+      setShowNewForm(false);
+      await loadClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Stock aliments par type
-  const stockParType = feedEntries.reduce<Record<string, number>>((acc, entry) => {
-    const sign = entry.movementType === "in" ? 1 : -1;
-    acc[entry.feedType] = (acc[entry.feedType] ?? 0) + sign * Number(entry.quantityKg);
-    return acc;
-  }, {});
+  const onUpdateClient = async (id: number) => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editData),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur");
+      toast.success("Client mis à jour");
+      setEditingId(null);
+      await loadClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onDeleteClient = async (id: number) => {
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erreur");
+      toast.success("Client supprimé");
+      setDeleteConfirmId(null);
+      await loadClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  };
+
+  const startEdit = (c: Client) => {
+    setEditingId(c.id);
+    setEditData({ name: c.name, city: c.city ?? "", phone: c.phone ?? "" });
+  };
 
   return (
     <div>
       <Header
-        title="Stocks"
+        title="Clients"
         username={session?.user?.name ?? undefined}
         userRole={session?.user?.role}
       />
-      <div className="p-6 space-y-6">
-        <Tabs defaultValue="oeufs">
-          <TabsList>
-            <TabsTrigger value="oeufs">
-              <Egg className="h-4 w-4 mr-2" />
-              Stock oeufs
-            </TabsTrigger>
-            <TabsTrigger value="aliments">
-              <Package className="h-4 w-4 mr-2" />
-              Stock aliments
-            </TabsTrigger>
-          </TabsList>
+      <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
 
-          {/* Stock oeufs */}
-          <TabsContent value="oeufs">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-yellow-500">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total récolté</p>
-                <p className="text-2xl font-bold">{(stockSummary?.totalEggs ?? 0).toLocaleString("fr-FR")}</p>
-                <p className="text-xs text-gray-400 mt-1">oeufs</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-red-400">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Vendus + cassés</p>
-                <p className="text-2xl font-bold">
-                  {((stockSummary?.totalSoldEggs ?? 0) + (stockSummary?.totalBroken ?? 0)).toLocaleString("fr-FR")}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">oeufs</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-green-500">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stock disponible</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {(stockSummary?.stockOeufs ?? 0).toLocaleString("fr-FR")}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  = {stockSummary?.stockPlaquettes ?? 0} plaquettes
-                </p>
-              </div>
+        {/* Stats + actions */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+              <Users className="h-5 w-5 text-amber-600" />
             </div>
-            <div className="mt-4 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Formule de calcul</h3>
-              <div className="flex items-center gap-3 flex-wrap text-sm">
-                <span className="px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded-lg font-medium border border-yellow-100">
-                  {(stockSummary?.totalEggs ?? 0).toLocaleString("fr-FR")} récoltés
-                </span>
-                <span className="text-gray-400">−</span>
-                <span className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg font-medium border border-red-100">
-                  {(stockSummary?.totalSoldEggs ?? 0).toLocaleString("fr-FR")} vendus
-                </span>
-                <span className="text-gray-400">−</span>
-                <span className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg font-medium border border-orange-100">
-                  {(stockSummary?.totalBroken ?? 0).toLocaleString("fr-FR")} cassés
-                </span>
-                <span className="text-gray-400">=</span>
-                <span className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg font-semibold border border-green-200">
-                  {(stockSummary?.stockOeufs ?? 0).toLocaleString("fr-FR")} en stock
-                </span>
-              </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{clients.length}</p>
+              <p className="text-xs text-slate-400">client{clients.length !== 1 ? "s" : ""} enregistré{clients.length !== 1 ? "s" : ""}</p>
             </div>
-          </TabsContent>
+          </div>
+          {!readonly && (
+            <Button
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => { setShowNewForm((v) => !v); setEditingId(null); }}
+            >
+              <Plus className="h-4 w-4" />
+              Nouveau client
+            </Button>
+          )}
+        </div>
 
-          {/* Stock aliments */}
-          <TabsContent value="aliments">
-            {/* Résumé par type */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              {(["demarrage", "croissance", "ponte"] as const).map((type) => (
-                <div key={type} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    {getFeedTypeLabel(type)}
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(stockParType[type] ?? 0).toFixed(1)} kg
-                  </p>
-                  <p className={`text-xs mt-1 ${(stockParType[type] ?? 0) < 50 ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                    {(stockParType[type] ?? 0) < 50 ? "Stock faible !" : "Stock correct"}
-                  </p>
+        {/* Formulaire nouveau client */}
+        {showNewForm && !readonly && (
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900">Nouveau client</h3>
+              <button onClick={() => { setShowNewForm(false); reset(); }} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit(onCreateClient)} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label required>Nom</Label>
+                  <Input {...register("name")} placeholder="Ex: Amadou Diallo" error={errors.name?.message} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Ville</Label>
+                  <Input {...register("city")} placeholder="Ex: Dakar" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Téléphone</Label>
+                  <Input {...register("phone")} placeholder="Ex: 77 000 00 00" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => { setShowNewForm(false); reset(); }}>Annuler</Button>
+                <Button type="submit" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" loading={isSubmitting}>
+                  Créer
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Recherche */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, ville ou téléphone…"
+            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Liste des clients */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          {filteredClients.length === 0 ? (
+            <div className="py-14 text-center">
+              <Users className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm">
+                {search ? "Aucun client ne correspond à la recherche" : "Aucun client enregistré"}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {filteredClients.map((client) => (
+                <div key={client.id} className="px-5 py-4">
+                  {editingId === client.id ? (
+                    /* Mode édition */
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label required>Nom</Label>
+                          <input
+                            value={editData.name ?? ""}
+                            onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Ville</Label>
+                          <input
+                            value={editData.city ?? ""}
+                            onChange={(e) => setEditData((d) => ({ ...d, city: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Téléphone</Label>
+                          <input
+                            value={editData.phone ?? ""}
+                            onChange={(e) => setEditData((d) => ({ ...d, phone: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingId(null)}>Annuler</Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white"
+                          loading={isSubmitting}
+                          onClick={() => onUpdateClient(client.id)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Sauvegarder
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Mode affichage */
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 font-bold text-slate-600 text-sm">
+                        {client.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 text-sm">{client.name}</p>
+                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                          {client.city && (
+                            <span className="flex items-center gap-1 text-xs text-slate-400">
+                              <MapPin className="h-3 w-3" />
+                              {client.city}
+                            </span>
+                          )}
+                          {client.phone && (
+                            <a
+                              href={`tel:${client.phone}`}
+                              className="flex items-center gap-1 text-xs text-amber-600 hover:underline"
+                            >
+                              <Phone className="h-3 w-3" />
+                              {client.phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      {!readonly && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => startEdit(client)}
+                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          {deleteConfirmId === client.id ? (
+                            <span className="flex items-center gap-1">
+                              <button
+                                onClick={() => onDeleteClient(client.id)}
+                                className="text-xs text-red-600 font-semibold hover:underline px-1"
+                              >
+                                Confirmer
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(null)}
+                                className="text-xs text-slate-400 hover:underline px-1"
+                              >
+                                Annuler
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteConfirmId(client.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-
-            {/* Historique mouvements */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-900">Mouvements stock aliments</h2>
-                {!readonly && (
-                  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4" />
-                        Mouvement
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Nouveau mouvement stock</DialogTitle>
-                      </DialogHeader>
-                      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-                        <div className="space-y-1.5">
-                          <Label required>Date</Label>
-                          <Input type="date" {...register("movementDate")} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <Label required>Type de mouvement</Label>
-                            <Select defaultValue="in" onValueChange={(v) => setValue("movementType", v as "in" | "out")}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="in">Entrée (achat)</SelectItem>
-                                <SelectItem value="out">Sortie (distribution)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label required>Type d&apos;aliment</Label>
-                            <Select defaultValue="ponte" onValueChange={(v) => setValue("feedType", v as "demarrage" | "croissance" | "ponte")}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="demarrage">Démarrage</SelectItem>
-                                <SelectItem value="croissance">Croissance</SelectItem>
-                                <SelectItem value="ponte">Ponte</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <Label required>Quantité (kg)</Label>
-                            <Input type="number" min="0.1" step="0.1" placeholder="0" {...register("quantityKg")} error={errors.quantityKg?.message} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Prix unitaire (XOF/kg)</Label>
-                            <Input type="number" min="0" placeholder="0" {...register("unitCost")} />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Notes</Label>
-                          <Textarea placeholder="Fournisseur, lot..." {...register("notes")} />
-                        </div>
-                        <div className="flex gap-3 pt-2">
-                          <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
-                            Annuler
-                          </Button>
-                          <Button type="submit" className="flex-1" loading={isSubmitting}>
-                            Enregistrer
-                          </Button>
-                        </div>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                )}
-              </div>
-
-              {isLoading ? (
-                <div className="p-8 text-center text-gray-500">Chargement...</div>
-              ) : feedEntries.length === 0 ? (
-                <div className="p-8 text-center">
-                  <Package className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">Aucun mouvement enregistré</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Aliment</th>
-                        <th>Quantité</th>
-                        <th>Coût total</th>
-                        <th>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {feedEntries.map((entry) => (
-                        <tr key={entry.id}>
-                          <td>{formatDateShort(entry.movementDate)}</td>
-                          <td>
-                            <div className="flex items-center gap-1.5">
-                              {entry.movementType === "in" ? (
-                                <ArrowUp className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <ArrowDown className="h-4 w-4 text-red-500" />
-                              )}
-                              <Badge variant={entry.movementType === "in" ? "success" : "destructive"}>
-                                {entry.movementType === "in" ? "Entrée" : "Sortie"}
-                              </Badge>
-                            </div>
-                          </td>
-                          <td>{getFeedTypeLabel(entry.feedType)}</td>
-                          <td className="font-medium">{Number(entry.quantityKg).toFixed(1)} kg</td>
-                          <td>{entry.totalCost ? formatXOF(entry.totalCost) : "-"}</td>
-                          <td className="text-gray-500 max-w-xs truncate">{entry.notes || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -6,16 +6,16 @@ import { signOut } from "next-auth/react";
 import Image from "next/image";
 import {
   LayoutDashboard, ClipboardList, ShoppingCart, Heart,
-  Package, BarChart3, Settings, LogOut, ChevronRight,
+  Users, BarChart3, Settings, LogOut, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/",              label: "Tableau de bord",    icon: LayoutDashboard },
   { href: "/saisie",        label: "Saisie de production", icon: ClipboardList },
-  { href: "/ventes",        label: "Saisie des ventes",  icon: ShoppingCart },
+  { href: "/ventes",        label: "Ventes",             icon: ShoppingCart },
   { href: "/sante",         label: "Santé",              icon: Heart },
-  { href: "/stocks",        label: "Stocks",             icon: Package },
+  { href: "/stocks",        label: "Clients",            icon: Users },
   { href: "/rapports",      label: "Rapports",           icon: BarChart3 },
   { href: "/administration",label: "Administration",     icon: Settings },
 ];

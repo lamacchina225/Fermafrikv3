@@ -37,9 +37,31 @@ export async function GET(req: NextRequest) {
   const info = searchParams.get("info");
   const report = searchParams.get("report");
   const month = searchParams.get("month");
+  const startDateParam = searchParams.get("startDate");
+  const endDateParam = searchParams.get("endDate");
+  const recent = searchParams.get("recent");
 
-  // Production mensuelle pour MonthlyProduction
-  if (month && report !== "true") {
+  // Saisies récentes (14 dernières) pour l'historique
+  if (recent === "true") {
+    const building = await db.query.buildings.findFirst({
+      where: eq(buildings.status, "active"),
+    });
+    if (!building) return NextResponse.json({ records: [] });
+    const cycle = await db.query.cycles.findFirst({
+      where: eq(cycles.buildingId, building.id),
+      orderBy: desc(cycles.id),
+    });
+    if (!cycle) return NextResponse.json({ records: [] });
+    const records = await db.query.dailyRecords.findMany({
+      where: eq(dailyRecords.cycleId, cycle.id),
+      orderBy: [desc(dailyRecords.recordDate)],
+      limit: 14,
+    });
+    return NextResponse.json({ records });
+  }
+
+  // Production mensuelle pour MonthlyProduction (période 18→17 ou mois calendaire)
+  if ((month || (startDateParam && endDateParam)) && report !== "true") {
     const building = await db.query.buildings.findFirst({
       where: eq(buildings.status, "active"),
     });
@@ -64,12 +86,17 @@ export async function GET(req: NextRequest) {
     const totalMortality = Number(mortalityAgg[0]?.total ?? 0);
     const effectifVivant = Math.max(0, cycle.initialCount - totalMortality);
 
-    // Récupérer les records du mois demandé
+    // Récupérer les records de la période demandée (18→17 ou mois calendaire)
+    const dateFilter =
+      startDateParam && endDateParam
+        ? and(
+            sql`${dailyRecords.recordDate} >= ${startDateParam}`,
+            sql`${dailyRecords.recordDate} <= ${endDateParam}`
+          )
+        : sql`${dailyRecords.recordDate}::text LIKE ${`${month}%`}`;
+
     const monthRecords = await db.query.dailyRecords.findMany({
-      where: and(
-        eq(dailyRecords.cycleId, cycle.id),
-        sql`${dailyRecords.recordDate}::text LIKE ${`${month}%`}`
-      ),
+      where: and(eq(dailyRecords.cycleId, cycle.id), dateFilter),
       orderBy: [dailyRecords.recordDate],
     });
 

@@ -33,34 +33,74 @@ interface MonthData {
   joursSaisis: number;
 }
 
-function getMonthsSince(startDate: string): string[] {
-  const months: string[] = [];
-  const cur = new Date(startDate);
-  cur.setDate(1);
-  const now = new Date();
-  while (cur <= now) {
-    months.push(format(cur, "yyyy-MM"));
-    cur.setMonth(cur.getMonth() + 1);
-  }
-  return months.reverse();
+interface BusinessPeriod {
+  value: string;
+  start: string;
+  end: string;
+  label: string;
 }
 
-function getDaysInMonth(yearMonth: string): number {
-  const [year, month] = yearMonth.split("-").map(Number);
-  return new Date(year, month, 0).getDate();
+/**
+ * Génère les périodes métier (du 18 au 17) depuis le début du cycle.
+ */
+function getBusinessPeriodsSince(cycleStartDate: string): BusinessPeriod[] {
+  const periods: BusinessPeriod[] = [];
+  const cycleStart = new Date(cycleStartDate + "T00:00:00");
+  const today = new Date();
+
+  // Premier 18 sur ou avant la date de début du cycle
+  let cur = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), 18);
+  if (cycleStart.getDate() < 18) {
+    cur = new Date(cycleStart.getFullYear(), cycleStart.getMonth() - 1, 18);
+  }
+  // Ne pas démarrer avant le début du cycle
+  while (cur < cycleStart) {
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 18);
+  }
+
+  while (cur <= today) {
+    const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 17);
+    const startStr = format(cur, "yyyy-MM-dd");
+    const endStr = format(end, "yyyy-MM-dd");
+    const label = `18 ${format(cur, "MMM", { locale: fr })} – 17 ${format(end, "MMM yyyy", { locale: fr })}`;
+    periods.push({ value: startStr, start: startStr, end: endStr, label });
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 18);
+  }
+
+  return periods.reverse();
+}
+
+/**
+ * Retourne le début de la période métier en cours (18 du mois courant ou précédent).
+ */
+function getCurrentPeriodStart(): string {
+  const today = new Date();
+  if (today.getDate() >= 18) {
+    return format(new Date(today.getFullYear(), today.getMonth(), 18), "yyyy-MM-dd");
+  }
+  return format(new Date(today.getFullYear(), today.getMonth() - 1, 18), "yyyy-MM-dd");
+}
+
+function getPeriodDays(start: string, end: string): number {
+  const s = new Date(start + "T00:00:00");
+  const e = new Date(end + "T00:00:00");
+  return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 }
 
 export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
-  const months = getMonthsSince(cycleStartDate);
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    format(new Date(), "yyyy-MM")
+  const periods = getBusinessPeriodsSince(cycleStartDate);
+  const [selectedPeriodStart, setSelectedPeriodStart] = useState<string>(
+    getCurrentPeriodStart()
   );
   const [data, setData] = useState<MonthData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const selectedPeriod = periods.find((p) => p.value === selectedPeriodStart) ?? periods[0];
+
   useEffect(() => {
+    if (!selectedPeriod) return;
     setIsLoading(true);
-    fetch(`/api/daily-records?month=${selectedMonth}`)
+    fetch(`/api/daily-records?startDate=${selectedPeriod.start}&endDate=${selectedPeriod.end}`)
       .then((r) => r.json())
       .then((json) => {
         if (json && json.records !== undefined) {
@@ -71,16 +111,12 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
       })
       .catch(() => setData(null))
       .finally(() => setIsLoading(false));
-  }, [selectedMonth]);
+  }, [selectedPeriodStart]);
 
-  const totalDaysInMonth = getDaysInMonth(selectedMonth);
+  const totalDaysInPeriod = selectedPeriod
+    ? getPeriodDays(selectedPeriod.start, selectedPeriod.end)
+    : 30;
   const joursSaisis = data?.joursSaisis ?? 0;
-
-  const monthLabel = (yearMonth: string) => {
-    const [year, month] = yearMonth.split("-").map(Number);
-    const d = new Date(year, month - 1, 1);
-    return format(d, "MMMM yyyy", { locale: fr });
-  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -91,13 +127,13 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
           <h2 className="font-semibold text-slate-900">Production mensuelle</h2>
         </div>
         <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
+          value={selectedPeriodStart}
+          onChange={(e) => setSelectedPeriodStart(e.target.value)}
           className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
         >
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {monthLabel(m)}
+          {periods.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
             </option>
           ))}
         </select>
@@ -163,7 +199,7 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
         ) : !data || data.records.length === 0 ? (
           <div className="h-52 flex flex-col items-center justify-center gap-2 text-slate-400">
             <Egg className="h-8 w-8 text-slate-200" />
-            <p className="text-sm">Aucune donnée pour ce mois</p>
+            <p className="text-sm">Aucune donnée pour cette période</p>
           </div>
         ) : (
           <>
@@ -212,8 +248,8 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
             </ResponsiveContainer>
             <p className="text-xs text-slate-400 text-center">
               {joursSaisis} jour{joursSaisis > 1 ? "s" : ""} saisi
-              {joursSaisis > 1 ? "s" : ""} sur {totalDaysInMonth} jours dans le
-              mois
+              {joursSaisis > 1 ? "s" : ""} sur {totalDaysInPeriod} jours dans la
+              période
             </p>
           </>
         )}
