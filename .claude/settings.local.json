@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^frontend$\")",
+      "Bash(grep -v \"^backend$\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const p = require\\(''./package.json''\\); console.log\\(''next:'', p.dependencies.next\\)\")",
+      "Bash(node -e \"console.log\\(require\\(''./node_modules/next/package.json''\\).version\\)\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(npm audit:*)",
+      "Bash(node -e \"console.log\\(''Structure vérifiée !''\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(npx tsx:*)",
+      "Bash(ls \"/c/Users/payokoue.LA_PRECISION/Documents/D2M/Projets web/fermafrikv3-app/src/app/\\(dashboard\\)\")"
+    ]
+  }
+}
