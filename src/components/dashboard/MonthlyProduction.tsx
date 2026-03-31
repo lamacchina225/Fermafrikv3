@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -88,14 +88,17 @@ function getPeriodDays(start: string, end: string): number {
 }
 
 export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
-  const periods = getBusinessPeriodsSince(cycleStartDate);
+  const periods = useMemo(() => getBusinessPeriodsSince(cycleStartDate), [cycleStartDate]);
   const [selectedPeriodStart, setSelectedPeriodStart] = useState<string>(
     getCurrentPeriodStart()
   );
   const [data, setData] = useState<MonthData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const selectedPeriod = periods.find((p) => p.value === selectedPeriodStart) ?? periods[0];
+  const selectedPeriod = useMemo(
+    () => periods.find((p) => p.value === selectedPeriodStart) ?? periods[0],
+    [periods, selectedPeriodStart]
+  );
 
   useEffect(() => {
     if (!selectedPeriod) return;
@@ -111,7 +114,7 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
       })
       .catch(() => setData(null))
       .finally(() => setIsLoading(false));
-  }, [selectedPeriod, selectedPeriodStart]);
+  }, [selectedPeriod]);
 
   const totalDaysInPeriod = selectedPeriod
     ? getPeriodDays(selectedPeriod.start, selectedPeriod.end)
