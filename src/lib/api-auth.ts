@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 
 type Role = string;
 
 interface AuthContext {
-  session: NonNullable<Awaited<ReturnType<typeof auth>>>;
+  session: Session;
   userId: number | null;
 }
 

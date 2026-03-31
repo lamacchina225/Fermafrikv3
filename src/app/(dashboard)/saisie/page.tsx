@@ -80,7 +80,7 @@ export default function SaisiePage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const readonly = status !== "loading" && !canWrite(session?.user?.role);
+  const readonly = !canWrite(session?.user?.role);
 
   // SWR remplace les useEffect + fetch manuels
   const { data: buildingInfo } = useSWR<{
@@ -212,7 +212,7 @@ export default function SaisiePage() {
         userRole={session?.user?.role}
       />
       <div className="p-6 max-w-3xl mx-auto">
-        {readonly && status !== "loading" && (
+        {readonly && status === "authenticated" && (
           <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl">
             <p className="text-orange-700 text-sm font-medium">
               Mode démo : consultation uniquement. Aucune modification possible.

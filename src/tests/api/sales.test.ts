@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/app/api/sales/route";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 
-const mockAuth = vi.mocked(auth);
+const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
 
 function makeRequest(body: object): NextRequest {
