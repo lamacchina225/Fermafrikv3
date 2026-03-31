@@ -8,46 +8,47 @@ const loginSchema = z.object({
   password: z.string().min(1, "Mot de passe requis"),
 });
 
-// Utilisateurs de fallback (dev / avant connexion DB)
-const FALLBACK_USERS = [
-  {
-    id: "1",
-    username: "admin",
-    passwordHash: "$2a$10$ZrsGyzR.JbTMLcBdAq8nnuWq.jYDWNoxgiYUJFarYrYEHYN.bCdxm",
-    role: "admin",
-  },
-  {
-    id: "2",
-    username: "gestion",
-    passwordHash: "$2a$10$ileobExm/v.46vEEr9vP7.mJEXilnpAZuGOoMVC/k4bQaHl5WE/r2",
-    role: "gestionnaire",
-  },
-  {
-    id: "3",
-    username: "demo",
-    passwordHash: "$2a$10$BsQ.vzJ1Wq.s9.HiJBeKmOWaM2vA29SkmvtOBWgsZ5HpGj03g7B/u",
-    role: "demo",
-  },
-];
+// Rate limiting : max 5 tentatives par IP sur 15 minutes
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000;
 
-async function findUser(username: string) {
-  // Essayer la base de données d'abord
-  const dbUrl = process.env.DATABASE_URL;
-  if (dbUrl && !dbUrl.includes("user:password@host")) {
-    try {
-      const { db } = await import("@/db");
-      const { users } = await import("@/db/schema");
-      const { eq } = await import("drizzle-orm");
-      const user = await db.query.users.findFirst({
-        where: eq(users.username, username),
-      });
-      if (user) return user;
-    } catch {
-      // DB non dispo → fallback
-    }
+/**
+ * Vérifie si une IP est autorisée à tenter une connexion.
+ * Bloque après MAX_ATTEMPTS tentatives échouées sur WINDOW_MS ms.
+ * @returns true si autorisé, false si bloqué
+ */
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    return true;
   }
-  // Fallback utilisateurs codés en dur
-  return FALLBACK_USERS.find((u) => u.username === username) ?? null;
+  if (entry.count >= MAX_ATTEMPTS) return false;
+  entry.count++;
+  return true;
+}
+
+/**
+ * Réinitialise le compteur de tentatives pour une IP (après login réussi).
+ */
+function resetRateLimit(ip: string) {
+  loginAttempts.delete(ip);
+}
+
+/**
+ * Recherche un utilisateur par son nom d'utilisateur en base de données.
+ * @returns L'utilisateur ou null s'il n'existe pas
+ */
+async function findUser(username: string) {
+  const { db } = await import("@/db");
+  const { users } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+  const user = await db.query.users.findFirst({
+    where: eq(users.username, username),
+  });
+  return user ?? null;
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -58,7 +59,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         username: { label: "Nom d'utilisateur", type: "text" },
         password: { label: "Mot de passe", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        const ip =
+          (req as Request & { headers?: Headers })?.headers?.get("x-forwarded-for") ??
+          (req as Request & { headers?: Headers })?.headers?.get("x-real-ip") ??
+          "unknown";
+
+        if (!checkRateLimit(ip)) {
+          console.warn(`Rate limit dépassé pour IP: ${ip}`);
+          return null;
+        }
+
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
@@ -68,6 +79,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const passwordMatch = await bcrypt.compare(password, user.passwordHash);
         if (!passwordMatch) return null;
+
+        resetRateLimit(ip);
 
         return {
           id: user.id.toString(),

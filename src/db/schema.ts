@@ -8,6 +8,7 @@ import {
   date,
   timestamp,
   pgEnum,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -61,103 +62,133 @@ export const buildings = pgTable("buildings", {
 });
 
 // Table cycles
-export const cycles = pgTable("cycles", {
-  id: serial("id").primaryKey(),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date"),
-  phase: phaseEnum("phase").notNull().default("demarrage"),
-  initialCount: integer("initial_count").notNull(),
-  notes: text("notes"),
-});
+export const cycles = pgTable(
+  "cycles",
+  {
+    id: serial("id").primaryKey(),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    phase: phaseEnum("phase").notNull().default("demarrage"),
+    initialCount: integer("initial_count").notNull(),
+    notes: text("notes"),
+  },
+  (t) => [index("cycles_building_id_idx").on(t.buildingId)]
+);
 
 // Table daily_records (saisies journalières)
-export const dailyRecords = pgTable("daily_records", {
-  id: serial("id").primaryKey(),
-  cycleId: integer("cycle_id")
-    .notNull()
-    .references(() => cycles.id),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  recordDate: date("record_date").notNull(),
-  eggsCollected: integer("eggs_collected").notNull().default(0),
-  eggsBroken: integer("eggs_broken").notNull().default(0),
-  eggsSold: integer("eggs_sold").notNull().default(0),
-  salePricePerTray: decimal("sale_price_per_tray", {
-    precision: 10,
-    scale: 2,
-  }),
-  revenue: decimal("revenue", { precision: 12, scale: 2 }).default("0"),
-  mortalityCount: integer("mortality_count").notNull().default(0),
-  mortalityCause: text("mortality_cause"),
-  feedQuantityKg: decimal("feed_quantity_kg", {
-    precision: 8,
-    scale: 2,
-  }).default("0"),
-  feedType: feedTypeEnum("feed_type"),
-  feedCost: decimal("feed_cost", { precision: 10, scale: 2 }).default("0"),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const dailyRecords = pgTable(
+  "daily_records",
+  {
+    id: serial("id").primaryKey(),
+    cycleId: integer("cycle_id")
+      .notNull()
+      .references(() => cycles.id),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    recordDate: date("record_date").notNull(),
+    eggsCollected: integer("eggs_collected").notNull().default(0),
+    eggsBroken: integer("eggs_broken").notNull().default(0),
+    eggsSold: integer("eggs_sold").notNull().default(0),
+    salePricePerTray: decimal("sale_price_per_tray", {
+      precision: 10,
+      scale: 2,
+    }),
+    revenue: decimal("revenue", { precision: 12, scale: 2 }).default("0"),
+    mortalityCount: integer("mortality_count").notNull().default(0),
+    mortalityCause: text("mortality_cause"),
+    feedQuantityKg: decimal("feed_quantity_kg", {
+      precision: 8,
+      scale: 2,
+    }).default("0"),
+    feedType: feedTypeEnum("feed_type"),
+    feedCost: decimal("feed_cost", { precision: 10, scale: 2 }).default("0"),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("daily_records_cycle_id_idx").on(t.cycleId),
+    index("daily_records_building_id_idx").on(t.buildingId),
+    index("daily_records_record_date_idx").on(t.recordDate),
+  ]
+);
 
 // Table expenses (dépenses)
-export const expenses = pgTable("expenses", {
-  id: serial("id").primaryKey(),
-  cycleId: integer("cycle_id")
-    .notNull()
-    .references(() => cycles.id),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  expenseDate: date("expense_date").notNull(),
-  label: varchar("label", { length: 200 }).notNull(),
-  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
-  category: expenseCategoryEnum("category").notNull().default("autre"),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: serial("id").primaryKey(),
+    cycleId: integer("cycle_id")
+      .notNull()
+      .references(() => cycles.id),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    expenseDate: date("expense_date").notNull(),
+    label: varchar("label", { length: 200 }).notNull(),
+    amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+    category: expenseCategoryEnum("category").notNull().default("autre"),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("expenses_cycle_id_idx").on(t.cycleId),
+    index("expenses_expense_date_idx").on(t.expenseDate),
+  ]
+);
 
 // Table sales (ventes)
-export const sales = pgTable("sales", {
-  id: serial("id").primaryKey(),
-  cycleId: integer("cycle_id")
-    .notNull()
-    .references(() => cycles.id),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  saleDate: date("sale_date").notNull(),
-  traysSold: integer("trays_sold").notNull(),
-  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
-  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
-  clientId: integer("client_id").references(() => clients.id),
-  buyerName: varchar("buyer_name", { length: 200 }),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const sales = pgTable(
+  "sales",
+  {
+    id: serial("id").primaryKey(),
+    cycleId: integer("cycle_id")
+      .notNull()
+      .references(() => cycles.id),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    saleDate: date("sale_date").notNull(),
+    traysSold: integer("trays_sold").notNull(),
+    unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+    clientId: integer("client_id").references(() => clients.id),
+    buyerName: varchar("buyer_name", { length: 200 }),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("sales_cycle_id_idx").on(t.cycleId),
+    index("sales_sale_date_idx").on(t.saleDate),
+  ]
+);
 
 // Table health_records (santé)
-export const healthRecords = pgTable("health_records", {
-  id: serial("id").primaryKey(),
-  cycleId: integer("cycle_id")
-    .notNull()
-    .references(() => cycles.id),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  recordDate: date("record_date").notNull(),
-  type: healthTypeEnum("type").notNull(),
-  productName: varchar("product_name", { length: 200 }).notNull(),
-  dose: varchar("dose", { length: 100 }),
-  cost: decimal("cost", { precision: 10, scale: 2 }).default("0"),
-  notes: text("notes"),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const healthRecords = pgTable(
+  "health_records",
+  {
+    id: serial("id").primaryKey(),
+    cycleId: integer("cycle_id")
+      .notNull()
+      .references(() => cycles.id),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    recordDate: date("record_date").notNull(),
+    type: healthTypeEnum("type").notNull(),
+    productName: varchar("product_name", { length: 200 }).notNull(),
+    dose: varchar("dose", { length: 100 }),
+    cost: decimal("cost", { precision: 10, scale: 2 }).default("0"),
+    notes: text("notes"),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("health_records_cycle_id_idx").on(t.cycleId)]
+);
 
 // Table feed_stock (stock aliments)
 export const feedStock = pgTable("feed_stock", {

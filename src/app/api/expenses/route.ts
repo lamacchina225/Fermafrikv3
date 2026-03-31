@@ -9,8 +9,8 @@ import { canWrite } from "@/lib/utils";
 const expenseSchema = z.object({
   buildingId: z.number(),
   cycleId: z.number(),
-  expenseDate: z.string(),
-  label: z.string().min(1),
+  expenseDate: z.string().max(10),
+  label: z.string().min(1).max(200),
   amount: z.number().min(0),
   category: z.enum(["alimentation", "sante", "energie", "main_oeuvre", "equipement", "autre"]),
 });

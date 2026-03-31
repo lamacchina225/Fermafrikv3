@@ -9,12 +9,12 @@ import { canWrite } from "@/lib/utils";
 const healthSchema = z.object({
   buildingId: z.number(),
   cycleId: z.number(),
-  recordDate: z.string(),
+  recordDate: z.string().max(10),
   type: z.enum(["vaccination", "medication"]),
-  productName: z.string().min(1),
-  dose: z.string().optional(),
+  productName: z.string().min(1).max(200),
+  dose: z.string().max(100).optional(),
   cost: z.number().min(0).optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(500).optional(),
 });
 
 export async function GET(req: NextRequest) {

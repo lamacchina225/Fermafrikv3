@@ -15,7 +15,10 @@
     "db:clear": "tsx --env-file=.env.local src/db/clear-demo.ts",
     "db:migrate-v2": "tsx --env-file=.env.local src/db/migrate-from-v2.ts",
     "db:migrate-real": "tsx --env-file=.env.local src/db/migrate-real-data.ts",
-    "db:preview": "tsx --env-file=.env.local src/db/preview-data.ts"
+    "db:preview": "tsx --env-file=.env.local src/db/preview-data.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.1.0",
@@ -50,20 +53,28 @@
     "react-hook-form": "^7.53.0",
     "recharts": "^2.12.7",
     "sonner": "^1.5.0",
+    "swr": "^2.4.1",
     "tailwind-merge": "^2.5.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.16.1",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
     "eslint-config-next": "^15.3.0",
+    "happy-dom": "^20.8.9",
+    "msw": "^2.12.14",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.10",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.2"
   }
 }

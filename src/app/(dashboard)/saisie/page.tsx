@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import useSWR, { mutate } from "swr";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,18 +10,8 @@ import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import {
-  Egg,
-  AlertTriangle,
-  Package,
-  Heart,
-  DollarSign,
-  ChevronDown,
-  ChevronUp,
-  Save,
-  Calendar,
-  Pencil,
-  Trash2,
-  History,
+  Egg, AlertTriangle, Package, Heart, DollarSign,
+  ChevronDown, ChevronUp, Save, Calendar,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -28,12 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { RecentRecordsTable } from "@/components/saisie/RecentRecordsTable";
 import { canWrite, formatNumber } from "@/lib/utils";
 
 const saisieSchema = z.object({
@@ -54,13 +42,6 @@ const saisieSchema = z.object({
 
 type SaisieFormData = z.infer<typeof saisieSchema>;
 
-interface Section {
-  id: string;
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}
-
 interface RecentRecord {
   id: number;
   recordDate: string;
@@ -73,12 +54,12 @@ interface RecentRecord {
   feedCost: string | null;
 }
 
-const sections: Section[] = [
+const sections = [
   { id: "oeufs", title: "Oeufs & Récolte", icon: Egg, color: "yellow" },
   { id: "troupeau", title: "Troupeau & Mortalité", icon: AlertTriangle, color: "red" },
   { id: "alimentation", title: "Alimentation", icon: Package, color: "blue" },
   { id: "depenses", title: "Dépenses diverses", icon: DollarSign, color: "green" },
-];
+] as const;
 
 const colorMap: Record<string, { bg: string; icon: string; border: string }> = {
   yellow: { bg: "bg-yellow-50", icon: "text-yellow-600", border: "border-yellow-200" },
@@ -87,28 +68,39 @@ const colorMap: Record<string, { bg: string; icon: string; border: string }> = {
   green: { bg: "bg-green-50", icon: "text-green-600", border: "border-green-200" },
 };
 
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const INFO_KEY = "/api/daily-records?info=true";
+const RECENT_KEY = "/api/daily-records?recent=true";
+
 export default function SaisiePage() {
   const { data: session, status } = useSession();
   const [openSections, setOpenSections] = useState<string[]>(["oeufs"]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [buildingInfo, setBuildingInfo] = useState<{
-    buildingId: number;
-    cycleId: number;
-    buildingName: string;
-  } | null>(null);
-  const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Le bouton n'est masqué QUE si la session est chargée et que le rôle est demo
   const readonly = status !== "loading" && !canWrite(session?.user?.role);
 
+  // SWR remplace les useEffect + fetch manuels
+  const { data: buildingInfo } = useSWR<{
+    buildingId: number;
+    cycleId: number;
+    buildingName: string;
+  }>(INFO_KEY, fetcher, { revalidateOnFocus: false });
+
+  const { data: recentData } = useSWR<{ records: RecentRecord[] }>(
+    RECENT_KEY,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const recentRecords = [...(recentData?.records ?? [])].sort((a, b) =>
+    b.recordDate.localeCompare(a.recordDate)
+  );
+
   const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
+    register, handleSubmit, setValue, watch, reset,
     formState: { errors },
   } = useForm<SaisieFormData>({
     resolver: zodResolver(saisieSchema),
@@ -121,32 +113,6 @@ export default function SaisiePage() {
       feedCost: 0,
     },
   });
-
-  const fetchRecent = useCallback(async () => {
-    try {
-      const res = await fetch("/api/daily-records?recent=true");
-      const data = await res.json();
-      if (data.records) {
-        const sorted = [...data.records].sort((a, b) =>
-          b.recordDate.localeCompare(a.recordDate)
-        );
-        setRecentRecords(sorted);
-      }
-    } catch {}
-  }, []);
-
-  // Charger infos bâtiment/cycle + saisies récentes
-  useEffect(() => {
-    fetch("/api/daily-records?info=true")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.buildingId) {
-          setBuildingInfo(data);
-        }
-      })
-      .catch(() => {});
-    fetchRecent();
-  }, [fetchRecent]);
 
   const toggleSection = (sectionId: string) => {
     setOpenSections((prev) =>
@@ -176,7 +142,7 @@ export default function SaisiePage() {
       if (!res.ok) throw new Error("Erreur lors de la suppression");
       toast.success("Saisie supprimée");
       setDeleteConfirmId(null);
-      await fetchRecent();
+      mutate(RECENT_KEY);
     } catch {
       toast.error("Erreur lors de la suppression");
     } finally {
@@ -185,14 +151,8 @@ export default function SaisiePage() {
   };
 
   const onSubmit = async (data: SaisieFormData) => {
-    if (readonly) {
-      toast.error("Mode démo : lecture seule");
-      return;
-    }
-    if (!buildingInfo) {
-      toast.error("Aucun bâtiment actif trouvé");
-      return;
-    }
+    if (readonly) { toast.error("Mode démo : lecture seule"); return; }
+    if (!buildingInfo) { toast.error("Aucun bâtiment actif trouvé"); return; }
 
     setIsSubmitting(true);
     try {
@@ -214,7 +174,6 @@ export default function SaisiePage() {
       const result = await response.json();
       toast.success(result.updated ? "Saisie mise à jour !" : "Saisie enregistrée !");
 
-      // Ajouter dépense si renseignée
       if (data.expenseLabel && data.expenseAmount && data.expenseAmount > 0) {
         await fetch("/api/expenses", {
           method: "POST",
@@ -233,14 +192,11 @@ export default function SaisiePage() {
 
       reset({
         recordDate: format(new Date(), "yyyy-MM-dd"),
-        eggsCollected: 0,
-        eggsBroken: 0,
-        mortalityCount: 0,
-        feedQuantityKg: 0,
-        feedCost: 0,
+        eggsCollected: 0, eggsBroken: 0, mortalityCount: 0,
+        feedQuantityKg: 0, feedCost: 0,
       });
       setOpenSections(["oeufs"]);
-      await fetchRecent();
+      mutate(RECENT_KEY);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     } finally {
@@ -307,51 +263,27 @@ export default function SaisiePage() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${colors.bg} ${colors.border} border`}
-                    >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${colors.bg} ${colors.border} border`}>
                       <Icon className={`h-5 w-5 ${colors.icon}`} />
                     </div>
-                    <span className="font-semibold text-gray-900">
-                      {section.title}
-                    </span>
+                    <span className="font-semibold text-gray-900">{section.title}</span>
                   </div>
-                  {isOpen ? (
-                    <ChevronUp className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-gray-400" />
-                  )}
+                  {isOpen ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
                 </button>
 
                 {isOpen && (
                   <div className="p-5 space-y-4">
-                    {/* Section Oeufs */}
                     {section.id === "oeufs" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="eggsCollected" required>
-                            Oeufs récoltés
-                          </Label>
-                          <Input
-                            id="eggsCollected"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            {...register("eggsCollected")}
-                            error={errors.eggsCollected?.message}
-                            disabled={readonly}
-                          />
+                          <Label htmlFor="eggsCollected" required>Oeufs récoltés</Label>
+                          <Input id="eggsCollected" type="number" min="0" placeholder="0"
+                            {...register("eggsCollected")} error={errors.eggsCollected?.message} disabled={readonly} />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="eggsBroken">Oeufs cassés</Label>
-                          <Input
-                            id="eggsBroken"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            {...register("eggsBroken")}
-                            disabled={readonly}
-                          />
+                          <Input id="eggsBroken" type="number" min="0" placeholder="0"
+                            {...register("eggsBroken")} disabled={readonly} />
                         </div>
                         <div className="space-y-1.5">
                           <Label>Plaquettes (auto)</Label>
@@ -362,69 +294,36 @@ export default function SaisiePage() {
                       </div>
                     )}
 
-                    {/* Section Troupeau */}
                     {section.id === "troupeau" && (
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label htmlFor="mortalityCount">
-                              Mortalité du jour
-                            </Label>
-                            <Input
-                              id="mortalityCount"
-                              type="number"
-                              min="0"
-                              placeholder="0"
-                              {...register("mortalityCount")}
-                              disabled={readonly}
-                            />
+                            <Label htmlFor="mortalityCount">Mortalité du jour</Label>
+                            <Input id="mortalityCount" type="number" min="0" placeholder="0"
+                              {...register("mortalityCount")} disabled={readonly} />
                           </div>
                         </div>
                         {(watch("mortalityCount") ?? 0) > 0 && (
                           <div className="space-y-1.5">
-                            <Label htmlFor="mortalityCause">
-                              Cause de la mortalité
-                            </Label>
-                            <Textarea
-                              id="mortalityCause"
-                              placeholder="Maladie, accident, cause inconnue..."
-                              {...register("mortalityCause")}
-                              disabled={readonly}
-                            />
+                            <Label htmlFor="mortalityCause">Cause de la mortalité</Label>
+                            <Textarea id="mortalityCause" placeholder="Maladie, accident, cause inconnue..."
+                              {...register("mortalityCause")} disabled={readonly} />
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Section Alimentation */}
                     {section.id === "alimentation" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label htmlFor="feedQuantityKg">Quantité (kg)</Label>
-                          <Input
-                            id="feedQuantityKg"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            placeholder="0"
-                            {...register("feedQuantityKg")}
-                            disabled={readonly}
-                          />
+                          <Input id="feedQuantityKg" type="number" min="0" step="0.1" placeholder="0"
+                            {...register("feedQuantityKg")} disabled={readonly} />
                         </div>
                         <div className="space-y-1.5">
                           <Label>Type d&apos;aliment</Label>
-                          <Select
-                            onValueChange={(v) =>
-                              setValue(
-                                "feedType",
-                                v as "demarrage" | "croissance" | "ponte"
-                              )
-                            }
-                            disabled={readonly}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choisir..." />
-                            </SelectTrigger>
+                          <Select onValueChange={(v) => setValue("feedType", v as "demarrage" | "croissance" | "ponte")} disabled={readonly}>
+                            <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="demarrage">Démarrage</SelectItem>
                               <SelectItem value="croissance">Croissance</SelectItem>
@@ -434,19 +333,12 @@ export default function SaisiePage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="feedCost">Coût (XOF)</Label>
-                          <Input
-                            id="feedCost"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            {...register("feedCost")}
-                            disabled={readonly}
-                          />
+                          <Input id="feedCost" type="number" min="0" placeholder="0"
+                            {...register("feedCost")} disabled={readonly} />
                         </div>
                       </div>
                     )}
 
-                    {/* Section Dépenses */}
                     {section.id === "depenses" && (
                       <div className="space-y-4">
                         <p className="text-xs text-gray-500">
@@ -455,46 +347,19 @@ export default function SaisiePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label htmlFor="expenseLabel">Libellé</Label>
-                            <Input
-                              id="expenseLabel"
-                              type="text"
-                              placeholder="Ex: Achat médicaments..."
-                              {...register("expenseLabel")}
-                              disabled={readonly}
-                            />
+                            <Input id="expenseLabel" type="text" placeholder="Ex: Achat médicaments..."
+                              {...register("expenseLabel")} disabled={readonly} />
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor="expenseAmount">Montant (XOF)</Label>
-                            <Input
-                              id="expenseAmount"
-                              type="number"
-                              min="0"
-                              placeholder="0"
-                              {...register("expenseAmount")}
-                              disabled={readonly}
-                            />
+                            <Input id="expenseAmount" type="number" min="0" placeholder="0"
+                              {...register("expenseAmount")} disabled={readonly} />
                           </div>
                         </div>
                         <div className="space-y-1.5">
                           <Label>Catégorie</Label>
-                          <Select
-                            onValueChange={(v) =>
-                              setValue(
-                                "expenseCategory",
-                                v as
-                                  | "alimentation"
-                                  | "sante"
-                                  | "energie"
-                                  | "main_oeuvre"
-                                  | "equipement"
-                                  | "autre"
-                              )
-                            }
-                            disabled={readonly}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choisir une catégorie..." />
-                            </SelectTrigger>
+                          <Select onValueChange={(v) => setValue("expenseCategory", v as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")} disabled={readonly}>
+                            <SelectTrigger><SelectValue placeholder="Choisir une catégorie..." /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="alimentation">Alimentation</SelectItem>
                               <SelectItem value="sante">Santé</SelectItem>
@@ -513,113 +378,24 @@ export default function SaisiePage() {
             );
           })}
 
-          {/* Bouton enregistrer */}
           {!readonly && (
-            <Button
-              type="submit"
-              className="w-full h-12 text-base bg-amber-500 hover:bg-amber-600 text-white"
-              loading={isSubmitting}
-            >
+            <Button type="submit" className="w-full h-12 text-base bg-amber-500 hover:bg-amber-600 text-white" loading={isSubmitting}>
               <Save className="h-5 w-5" />
               Enregistrer la saisie
             </Button>
           )}
         </form>
 
-        {/* Historique des 14 dernières saisies */}
-        {recentRecords.length > 0 && (
-          <div className="mt-8 space-y-3">
-            <div className="flex items-center gap-2">
-              <History className="h-4 w-4 text-slate-500" />
-              <h3 className="font-semibold text-slate-900">Saisies récentes</h3>
-              <span className="text-xs text-slate-400">(14 dernières)</span>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-xs border-b border-slate-100">
-                      <th className="text-left px-4 py-2.5 font-medium">Date</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Oeufs</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Cassés</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Mort.</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Alim. (kg)</th>
-                      {!readonly && (
-                        <th className="px-4 py-2.5 text-right font-medium">Actions</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentRecords.map((rec) => (
-                      <tr key={rec.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap capitalize">
-                          {format(new Date(rec.recordDate + "T00:00:00"), "EEE d MMM yyyy", { locale: fr })}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-medium text-slate-800">
-                          {formatNumber(rec.eggsCollected)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-slate-500">
-                          {rec.eggsBroken || "–"}
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          {rec.mortalityCount > 0
-                            ? <span className="text-rose-600 font-medium">{rec.mortalityCount}</span>
-                            : <span className="text-slate-400">–</span>}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-slate-500">
-                          {Number(rec.feedQuantityKg ?? 0) > 0 ? Number(rec.feedQuantityKg) : "–"}
-                        </td>
-                        {!readonly && (
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleEditSetup(rec)}
-                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              >
-                                <Pencil className="h-3 w-3" />
-                                Modifier
-                              </button>
-                              <span className="text-slate-200">|</span>
-                              {deleteConfirmId === rec.id ? (
-                                <span className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(rec.id)}
-                                    disabled={isDeleting}
-                                    className="text-xs text-red-600 font-semibold hover:underline"
-                                  >
-                                    Confirmer
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleteConfirmId(null)}
-                                    className="text-xs text-slate-500 hover:underline"
-                                  >
-                                    Annuler
-                                  </button>
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirmId(rec.id)}
-                                  className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                  Supprimer
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+        <RecentRecordsTable
+          records={recentRecords}
+          readonly={readonly}
+          deleteConfirmId={deleteConfirmId}
+          isDeleting={isDeleting}
+          onEdit={handleEditSetup}
+          onDeleteRequest={setDeleteConfirmId}
+          onDeleteConfirm={handleDelete}
+          onDeleteCancel={() => setDeleteConfirmId(null)}
+        />
       </div>
     </div>
   );

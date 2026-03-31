@@ -12,7 +12,16 @@
       "Bash(node -e \"console.log\\(''Structure vérifiée !''\\)\")",
       "Bash(node -e \":*)",
       "Bash(npx tsx:*)",
-      "Bash(ls \"/c/Users/payokoue.LA_PRECISION/Documents/D2M/Projets web/fermafrikv3-app/src/app/\\(dashboard\\)\")"
+      "Bash(ls \"/c/Users/payokoue.LA_PRECISION/Documents/D2M/Projets web/fermafrikv3-app/src/app/\\(dashboard\\)\")",
+      "Bash(git pull:*)",
+      "Bash(ssh-add -l)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(git checkout:*)",
+      "Bash(wc -l src/app/api/**/route.ts)",
+      "Bash(grep -n \"console.error\" src/app/api/**/*.ts)",
+      "Bash(node -e \"const crypto = require\\(''crypto''\\); console.log\\(crypto.randomBytes\\(32\\).toString\\(''base64''\\)\\);\")",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

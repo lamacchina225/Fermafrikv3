@@ -7,9 +7,9 @@ import { canWrite } from "@/lib/utils";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  city: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  name: z.string().min(1).max(200).optional(),
+  city: z.string().max(100).optional().nullable(),
+  phone: z.string().max(20).optional().nullable(),
 });
 
 export async function PATCH(

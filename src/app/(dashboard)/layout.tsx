@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default async function DashboardLayout({
   children,
@@ -16,7 +17,7 @@ export default async function DashboardLayout({
       <Sidebar userRole={session.user.role} username={session.user.name ?? undefined} />
       <div className="md:ml-64 flex flex-col min-h-screen">
         <main className="flex-1 pb-20 md:pb-0">
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
       <BottomNav userRole={session.user.role} />

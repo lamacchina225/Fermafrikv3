@@ -8,12 +8,12 @@ import { isAdmin } from "@/lib/utils";
 
 const settingsSchema = z.object({
   prix_plaquette: z.number().min(1).optional(),
-  nom_ferme: z.string().min(1).optional(),
-  devise: z.string().optional(),
+  nom_ferme: z.string().min(1).max(200).optional(),
+  devise: z.string().max(10).optional(),
 });
 
 const buildingSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(100),
   capacity: z.number().min(1),
   status: z.enum(["active", "inactive", "construction"]).optional(),
 });
@@ -31,7 +31,10 @@ export async function GET(req: NextRequest) {
     const allBuildings = await db.query.buildings.findMany({
       orderBy: [buildings.name],
     });
-    return NextResponse.json({ buildings: allBuildings });
+    return NextResponse.json(
+      { buildings: allBuildings },
+      { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" } }
+    );
   }
 
   // Retourner tous les paramètres comme objet clé-valeur
@@ -41,7 +44,9 @@ export async function GET(req: NextRequest) {
     settingsMap[s.key] = s.value;
   });
 
-  return NextResponse.json(settingsMap);
+  return NextResponse.json(settingsMap, {
+    headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=60" },
+  });
 }
 
 export async function POST(req: NextRequest) {

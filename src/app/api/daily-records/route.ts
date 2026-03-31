@@ -17,11 +17,11 @@ import { fr } from "date-fns/locale";
 const dailyRecordSchema = z.object({
   buildingId: z.number(),
   cycleId: z.number(),
-  recordDate: z.string(),
+  recordDate: z.string().max(10),
   eggsCollected: z.number().min(0).default(0),
   eggsBroken: z.number().min(0).default(0),
   mortalityCount: z.number().min(0).default(0),
-  mortalityCause: z.string().optional(),
+  mortalityCause: z.string().max(500).optional(),
   feedQuantityKg: z.number().min(0).optional(),
   feedType: z.enum(["demarrage", "croissance", "ponte"]).optional(),
   feedCost: z.number().min(0).optional(),
@@ -172,26 +172,35 @@ export async function GET(req: NextRequest) {
     // month peut être "yyyy-MM" ou "all" quand report=true
     const reportMonth = searchParams.get("month");
 
-    const allRecords = await db.query.dailyRecords.findMany({
-      where: eq(dailyRecords.cycleId, cycle.id),
-      orderBy: [dailyRecords.recordDate],
-    });
-
-    // Filtrer par période
-    let records = allRecords;
+    // Construire le filtre de période directement en SQL
+    let periodFilter: ReturnType<typeof and> | undefined;
     if (reportMonth && reportMonth !== "all") {
-      // Filtrer sur le mois exact (ex: "2026-03")
-      records = allRecords.filter((r) => r.recordDate.startsWith(reportMonth));
+      periodFilter = sql`${dailyRecords.recordDate}::text LIKE ${`${reportMonth}%`}`;
     } else if (daysParam && daysParam !== "all") {
-      const n = parseInt(daysParam);
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - n);
-      const cutoffStr = cutoff.toISOString().split("T")[0];
-      records = allRecords.filter((r) => r.recordDate >= cutoffStr);
+      const n = parseInt(daysParam, 10);
+      if (!isNaN(n) && n > 0) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - n);
+        const cutoffStr = cutoff.toISOString().split("T")[0];
+        periodFilter = sql`${dailyRecords.recordDate} >= ${cutoffStr}`;
+      }
     }
 
-    const totalMortality = allRecords.reduce((s, r) => s + r.mortalityCount, 0);
+    // Mortalité totale du cycle (toujours sur tout le cycle)
+    const [mortalityAgg] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${dailyRecords.mortalityCount}), 0)` })
+      .from(dailyRecords)
+      .where(eq(dailyRecords.cycleId, cycle.id));
+    const totalMortality = Number(mortalityAgg?.total ?? 0);
     const effectifVivant = Math.max(0, cycle.initialCount - totalMortality);
+
+    // Records filtrés par période via SQL
+    const records = await db.query.dailyRecords.findMany({
+      where: periodFilter
+        ? and(eq(dailyRecords.cycleId, cycle.id), periodFilter)
+        : eq(dailyRecords.cycleId, cycle.id),
+      orderBy: [dailyRecords.recordDate],
+    });
 
     // Taux de ponte — sous-échantillonner si trop de points
     let ponteSample = records;
@@ -214,22 +223,35 @@ export async function GET(req: NextRequest) {
         mortalite: r.mortalityCount,
       }));
 
-    const allSales = await db.query.sales.findMany({ where: eq(sales.cycleId, cycle.id) });
-    const allExpenses = await db.query.expenses.findMany({ where: eq(expenses.cycleId, cycle.id) });
-
-    // Filtrer ventes/dépenses sur la période
-    let filteredSales = allSales;
-    let filteredExpenses = allExpenses;
+    // Construire les filtres SQL pour sales et expenses
+    let salesPeriodFilter: ReturnType<typeof and> | undefined;
+    let expensesPeriodFilter: ReturnType<typeof and> | undefined;
     if (reportMonth && reportMonth !== "all") {
-      filteredSales = allSales.filter((s) => s.saleDate.startsWith(reportMonth));
-      filteredExpenses = allExpenses.filter((e) => e.expenseDate.startsWith(reportMonth));
+      salesPeriodFilter = sql`${sales.saleDate}::text LIKE ${`${reportMonth}%`}`;
+      expensesPeriodFilter = sql`${expenses.expenseDate}::text LIKE ${`${reportMonth}%`}`;
     } else if (daysParam && daysParam !== "all") {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - parseInt(daysParam));
-      const cutoffStr = cutoff.toISOString().split("T")[0];
-      filteredSales = allSales.filter((s) => s.saleDate >= cutoffStr);
-      filteredExpenses = allExpenses.filter((e) => e.expenseDate >= cutoffStr);
+      const n = parseInt(daysParam, 10);
+      if (!isNaN(n) && n > 0) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - n);
+        const cutoffStr = cutoff.toISOString().split("T")[0];
+        salesPeriodFilter = sql`${sales.saleDate} >= ${cutoffStr}`;
+        expensesPeriodFilter = sql`${expenses.expenseDate} >= ${cutoffStr}`;
+      }
     }
+
+    const [filteredSales, filteredExpenses] = await Promise.all([
+      db.query.sales.findMany({
+        where: salesPeriodFilter
+          ? and(eq(sales.cycleId, cycle.id), salesPeriodFilter)
+          : eq(sales.cycleId, cycle.id),
+      }),
+      db.query.expenses.findMany({
+        where: expensesPeriodFilter
+          ? and(eq(expenses.cycleId, cycle.id), expensesPeriodFilter)
+          : eq(expenses.cycleId, cycle.id),
+      }),
+    ]);
 
     // Revenus vs dépenses par mois
     const monthMap: Record<string, { revenus: number; depenses: number }> = {};
@@ -370,11 +392,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Liste des saisies
-  const records = await db.query.dailyRecords.findMany({
-    orderBy: [desc(dailyRecords.recordDate)],
+  // Liste des saisies (paginée)
+  const limitParam = searchParams.get("limit");
+  const offsetParam = searchParams.get("offset");
+  const limit = Math.min(Math.max(parseInt(limitParam ?? "50", 10) || 50, 1), 200);
+  const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
+
+  const [records, totalCount] = await Promise.all([
+    db.query.dailyRecords.findMany({
+      orderBy: [desc(dailyRecords.recordDate)],
+      limit,
+      offset,
+    }),
+    db.select({ count: sql<number>`COUNT(*)` }).from(dailyRecords),
+  ]);
+
+  return NextResponse.json({
+    records,
+    pagination: { limit, offset, total: Number(totalCount[0]?.count ?? 0) },
   });
-  return NextResponse.json({ records });
 }
 
 export async function POST(req: NextRequest) {

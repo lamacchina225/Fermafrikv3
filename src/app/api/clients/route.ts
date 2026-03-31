@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
   try {
     const allClients = await db.select().from(clients).orderBy(clients.name);
-    return NextResponse.json({ clients: allClients });
+    return NextResponse.json(
+      { clients: allClients },
+      { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" } }
+    );
   } catch (error) {
     console.error("Error fetching clients:", error);
     return NextResponse.json(
@@ -17,6 +24,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { name, city, phone } = body;

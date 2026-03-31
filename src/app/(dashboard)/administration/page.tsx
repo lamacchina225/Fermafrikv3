@@ -123,7 +123,7 @@ export default function AdministrationPage() {
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-8 text-center">
             <Lock className="h-12 w-12 text-orange-400 mx-auto mb-4" />
             <p className="text-orange-700 font-semibold">Accès restreint</p>
-            <p className="text-orange-600 text-sm mt-1">Mode démo : accès à l'administration non disponible.</p>
+            <p className="text-orange-600 text-sm mt-1">Mode démo : accès à l&apos;administration non disponible.</p>
           </div>
         </div>
       </div>
@@ -177,7 +177,7 @@ export default function AdministrationPage() {
                   <Input type="text" {...regSettings("nom_ferme")} disabled={!admin} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label required>Prix d'une plaquette (XOF)</Label>
+                  <Label required>Prix d&apos;une plaquette (XOF)</Label>
                   <Input
                     type="number"
                     min="1"
@@ -283,7 +283,7 @@ export default function AdministrationPage() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-400 mt-4">
-                  Pour modifier les mots de passe, contactez l'administrateur système.
+                  Pour modifier les mots de passe, contactez l&apos;administrateur système.
                 </p>
               </div>
             </TabsContent>

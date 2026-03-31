@@ -9,17 +9,17 @@ import { canWrite } from "@/lib/utils";
 const linkedExpenseSchema = z.object({
   type: z.enum(["transport", "plateaux", "autre"]),
   amount: z.number().min(1),
-  note: z.string().optional(),
+  note: z.string().max(500).optional(),
 });
 
 const saleSchema = z.object({
   buildingId: z.number(),
   cycleId: z.number(),
-  saleDate: z.string(),
+  saleDate: z.string().max(10),
   traysSold: z.number().min(1),
   unitPrice: z.number().min(1),
   clientId: z.number().optional().nullable(),
-  buyerName: z.string().optional(),
+  buyerName: z.string().max(200).optional(),
   linkedExpense: linkedExpenseSchema.optional(),
 });
 

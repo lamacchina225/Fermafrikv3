@@ -8,13 +8,13 @@ import { canWrite } from "@/lib/utils";
 
 const feedStockSchema = z.object({
   buildingId: z.number(),
-  movementDate: z.string(),
+  movementDate: z.string().max(10),
   movementType: z.enum(["in", "out"]),
   quantityKg: z.number().min(0.1),
   unitCost: z.number().min(0).optional(),
   totalCost: z.number().min(0).optional(),
   feedType: z.enum(["demarrage", "croissance", "ponte"]),
-  notes: z.string().optional(),
+  notes: z.string().max(500).optional(),
 });
 
 export async function GET(req: NextRequest) {

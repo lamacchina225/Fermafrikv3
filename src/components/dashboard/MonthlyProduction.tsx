@@ -111,7 +111,7 @@ export function MonthlyProduction({ cycleStartDate }: MonthlyProductionProps) {
       })
       .catch(() => setData(null))
       .finally(() => setIsLoading(false));
-  }, [selectedPeriodStart]);
+  }, [selectedPeriod, selectedPeriodStart]);
 
   const totalDaysInPeriod = selectedPeriod
     ? getPeriodDays(selectedPeriod.start, selectedPeriod.end)
