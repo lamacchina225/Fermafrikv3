@@ -1,5 +1,5 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+﻿import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import * as schema from "./schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -19,8 +19,8 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = mysql.createPool(process.env.DATABASE_URL!);
+const db = drizzle(pool, { schema, mode: "default" });
 
 async function check() {
   const buildings = await db.query.buildings.findMany();
@@ -50,3 +50,4 @@ async function check() {
 }
 
 check().catch(console.error).finally(() => process.exit(0));
+

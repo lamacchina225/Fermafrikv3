@@ -68,16 +68,17 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       const data = buildingSchema.parse(body);
 
-      const inserted = await db
+      const [{ id: buildingId }] = await db
         .insert(buildings)
         .values({
           name: data.name,
           capacity: data.capacity,
           status: data.status ?? "active",
         })
-        .returning();
+        .$returningId();
+      const [building] = await db.select().from(buildings).where(eq(buildings.id, buildingId)).limit(1);
 
-      return NextResponse.json({ success: true, building: inserted[0] });
+      return NextResponse.json({ success: true, building });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return NextResponse.json({ error: "Données invalides" }, { status: 400 });
@@ -106,12 +107,10 @@ export async function POST(req: NextRequest) {
             value: data.prix_plaquette.toString(),
             updatedBy: isNaN(userId) ? null : userId,
           })
-          .onConflictDoUpdate({
-            target: settings.key,
+          .onDuplicateKeyUpdate({
             set: {
               value: data.prix_plaquette.toString(),
               updatedBy: isNaN(userId) ? null : userId,
-              updatedAt: new Date(),
             },
           })
       );
@@ -126,12 +125,10 @@ export async function POST(req: NextRequest) {
             value: data.nom_ferme,
             updatedBy: isNaN(userId) ? null : userId,
           })
-          .onConflictDoUpdate({
-            target: settings.key,
+          .onDuplicateKeyUpdate({
             set: {
               value: data.nom_ferme,
               updatedBy: isNaN(userId) ? null : userId,
-              updatedAt: new Date(),
             },
           })
       );

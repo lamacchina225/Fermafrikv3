@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     const createdBy = isNaN(userId) ? null : userId;
 
     // Créer la vente
-    const inserted = await db
+    const [{ id: saleId }] = await db
       .insert(sales)
       .values({
         cycleId: data.cycleId,
@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
         buyerName: data.buyerName || null,
         createdBy,
       })
-      .returning();
+      .$returningId();
+    const [inserted] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
 
     // Si une dépense liée est fournie, la créer aussi
     if (data.linkedExpense) {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, sale: inserted[0] });
+    return NextResponse.json({ success: true, sale: inserted });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

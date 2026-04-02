@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Nettoyage post-migration :
  * 1. Supprime le bâtiment de seed (id=3) et son cycle vide
  * 2. Nettoie les labels de dépenses (supprime le préfixe [IMPORT_CARNET_...])
  * 3. Renomme "Ferme principale" en "Bâtiment A"
  */
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import * as schema from "./schema";
 import { eq, like } from "drizzle-orm";
 import * as fs from "fs";
@@ -26,8 +26,8 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = mysql.createPool(process.env.DATABASE_URL!);
+const db = drizzle(pool, { schema, mode: "default" });
 
 async function fix() {
   console.log("🔧 Nettoyage post-migration...\n");
@@ -86,3 +86,4 @@ async function fix() {
 }
 
 fix().catch(console.error).finally(() => process.exit(0));
+

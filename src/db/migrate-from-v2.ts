@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 /**
  * Migration Ferm'Afrik v2 (Prisma) → v3 (Drizzle)
  *
@@ -354,3 +355,4 @@ migrate().catch((e) => {
   console.error("\n❌ Erreur de migration :", e.message);
   process.exit(1);
 }).finally(() => process.exit(0));
+

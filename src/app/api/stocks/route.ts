@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     const data = feedStockSchema.parse(body);
     const userId = parseInt(session.user.id);
 
-    const inserted = await db
+    const [{ id: entryId }] = await db
       .insert(feedStock)
       .values({
         buildingId: data.buildingId,
@@ -103,9 +103,10 @@ export async function POST(req: NextRequest) {
         notes: data.notes,
         createdBy: isNaN(userId) ? null : userId,
       })
-      .returning();
+      .$returningId();
+    const [inserted] = await db.select().from(feedStock).where(eq(feedStock.id, entryId)).limit(1);
 
-    return NextResponse.json({ success: true, entry: inserted[0] });
+    return NextResponse.json({ success: true, entry: inserted });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Données invalides" }, { status: 400 });

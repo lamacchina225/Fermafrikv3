@@ -1,11 +1,12 @@
-/**
+﻿/**
  * Script pour supprimer les données de démo
  * Conserve : utilisateurs, bâtiments, cycles, paramètres, clients
  * Supprime  : saisies journalières, ventes, dépenses, santé, stock aliments
  */
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import * as schema from "./schema";
+import { sql } from "drizzle-orm";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -24,25 +25,31 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = mysql.createPool(process.env.DATABASE_URL!);
+const db = drizzle(pool, { schema, mode: "default" });
 
 async function clearDemo() {
   console.log("Suppression des données de démo...");
 
-  const [dr] = await db.delete(schema.dailyRecords).returning({ id: schema.dailyRecords.id });
-  const [sa] = await db.delete(schema.sales).returning({ id: schema.sales.id });
-  const [ex] = await db.delete(schema.expenses).returning({ id: schema.expenses.id });
-  const [hr] = await db.delete(schema.healthRecords).returning({ id: schema.healthRecords.id });
-  const [fs2] = await db.delete(schema.feedStock).returning({ id: schema.feedStock.id });
+  const drCount = (await db.select({ count: sql`count(*)` }).from(schema.dailyRecords))[0]?.count ?? 0;
+await db.delete(schema.dailyRecords);
+  const saCount = (await db.select({ count: sql`count(*)` }).from(schema.sales))[0]?.count ?? 0;
+await db.delete(schema.sales);
+  const exCount = (await db.select({ count: sql`count(*)` }).from(schema.expenses))[0]?.count ?? 0;
+await db.delete(schema.expenses);
+  const hrCount = (await db.select({ count: sql`count(*)` }).from(schema.healthRecords))[0]?.count ?? 0;
+await db.delete(schema.healthRecords);
+  const fsCount = (await db.select({ count: sql`count(*)` }).from(schema.feedStock))[0]?.count ?? 0;
+await db.delete(schema.feedStock);
 
   console.log("Données supprimées :");
-  console.log(`  - Saisies journalières : ${Array.isArray(dr) ? dr.length : 0}`);
-  console.log(`  - Ventes              : ${Array.isArray(sa) ? sa.length : 0}`);
-  console.log(`  - Dépenses            : ${Array.isArray(ex) ? ex.length : 0}`);
-  console.log(`  - Santé               : ${Array.isArray(hr) ? hr.length : 0}`);
-  console.log(`  - Stock aliments      : ${Array.isArray(fs2) ? fs2.length : 0}`);
+  console.log(`  - Saisies journalières : ${drCount}`);
+  console.log(`  - Ventes              : ${saCount}`);
+  console.log(`  - Dépenses            : ${exCount}`);
+  console.log(`  - Santé               : ${hrCount}`);
+  console.log(`  - Stock aliments      : ${fsCount}`);
   console.log("Base prête pour les vraies données !");
 }
 
 clearDemo().catch(console.error).finally(() => process.exit(0));
+

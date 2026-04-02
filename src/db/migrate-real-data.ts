@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
@@ -167,3 +168,4 @@ migrateRealData().catch((error) => {
   console.error("Erreur fatale:", error);
   process.exit(1);
 });
+

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { healthRecords } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { canWrite } from "@/lib/utils";
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const data = healthSchema.parse(body);
     const userId = parseInt(session.user.id);
 
-    const inserted = await db
+    const [{ id: recordId }] = await db
       .insert(healthRecords)
       .values({
         cycleId: data.cycleId,
@@ -57,9 +57,10 @@ export async function POST(req: NextRequest) {
         notes: data.notes,
         createdBy: isNaN(userId) ? null : userId,
       })
-      .returning();
+      .$returningId();
+    const [inserted] = await db.select().from(healthRecords).where(eq(healthRecords.id, recordId)).limit(1);
 
-    return NextResponse.json({ success: true, record: inserted[0] });
+    return NextResponse.json({ success: true, record: inserted });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Données invalides" }, { status: 400 });

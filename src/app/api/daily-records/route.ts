@@ -451,14 +451,13 @@ export async function POST(req: NextRequest) {
           feedQuantityKg: data.feedQuantityKg?.toString(),
           feedType: data.feedType,
           feedCost: data.feedCost?.toString(),
-          updatedAt: new Date(),
         })
         .where(eq(dailyRecords.id, existing.id));
 
       return NextResponse.json({ success: true, id: existing.id, updated: true });
     } else {
       // Nouvelle saisie
-      const inserted = await db
+      const [{ id: newRecordId }] = await db
         .insert(dailyRecords)
         .values({
           cycleId: data.cycleId,
@@ -475,9 +474,9 @@ export async function POST(req: NextRequest) {
           revenue: "0",
           createdBy: isNaN(userId) ? null : userId,
         })
-        .returning();
+        .$returningId();
 
-      return NextResponse.json({ success: true, id: inserted[0].id, updated: false });
+      return NextResponse.json({ success: true, id: newRecordId, updated: false });
     }
   } catch (error) {
     if (error instanceof z.ZodError) {

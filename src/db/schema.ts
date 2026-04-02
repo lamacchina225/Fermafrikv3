@@ -1,114 +1,84 @@
 import {
-  pgTable,
-  serial,
+  mysqlTable,
   text,
   varchar,
-  integer,
+  int,
   decimal,
   date,
   timestamp,
-  pgEnum,
+  mysqlEnum,
   index,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
 // Enums
-export const roleEnum = pgEnum("role", ["admin", "gestionnaire", "demo"]);
-export const buildingStatusEnum = pgEnum("building_status", [
-  "active",
-  "inactive",
-  "construction",
-]);
-export const phaseEnum = pgEnum("phase", [
-  "demarrage",
-  "croissance",
-  "production",
-]);
-export const expenseCategoryEnum = pgEnum("expense_category", [
-  "alimentation",
-  "sante",
-  "energie",
-  "main_oeuvre",
-  "equipement",
-  "autre",
-]);
-export const feedMovementTypeEnum = pgEnum("feed_movement_type", ["in", "out"]);
-export const feedTypeEnum = pgEnum("feed_type", [
-  "demarrage",
-  "croissance",
-  "ponte",
-]);
-export const healthTypeEnum = pgEnum("health_type", [
-  "vaccination",
-  "medication",
-]);
 
 // Table users
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+export const users = mysqlTable("users", {
+  id: int("id").autoincrement().primaryKey(),
   username: varchar("username", { length: 50 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  role: roleEnum("role").notNull().default("gestionnaire"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  role: mysqlEnum(["admin", "gestionnaire", "demo"]).notNull().default("gestionnaire"),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
 });
 
 // Table buildings (bâtiments)
-export const buildings = pgTable("buildings", {
-  id: serial("id").primaryKey(),
+export const buildings = mysqlTable("buildings", {
+  id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
-  capacity: integer("capacity").notNull(),
-  status: buildingStatusEnum("status").notNull().default("active"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  capacity: int("capacity").notNull(),
+  status: mysqlEnum(["active", "inactive", "construction"]).notNull().default("active"),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
 });
 
 // Table cycles
-export const cycles = pgTable(
+export const cycles = mysqlTable(
   "cycles",
   {
-    id: serial("id").primaryKey(),
-    buildingId: integer("building_id")
+    id: int("id").autoincrement().primaryKey(),
+    buildingId: int("building_id")
       .notNull()
       .references(() => buildings.id),
-    startDate: date("start_date").notNull(),
-    endDate: date("end_date"),
-    phase: phaseEnum("phase").notNull().default("demarrage"),
-    initialCount: integer("initial_count").notNull(),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }),
+    phase: mysqlEnum(["demarrage", "croissance", "production"]).notNull().default("demarrage"),
+    initialCount: int("initial_count").notNull(),
     notes: text("notes"),
   },
   (t) => [index("cycles_building_id_idx").on(t.buildingId)]
 );
 
 // Table daily_records (saisies journalières)
-export const dailyRecords = pgTable(
+export const dailyRecords = mysqlTable(
   "daily_records",
   {
-    id: serial("id").primaryKey(),
-    cycleId: integer("cycle_id")
+    id: int("id").autoincrement().primaryKey(),
+    cycleId: int("cycle_id")
       .notNull()
       .references(() => cycles.id),
-    buildingId: integer("building_id")
+    buildingId: int("building_id")
       .notNull()
       .references(() => buildings.id),
-    recordDate: date("record_date").notNull(),
-    eggsCollected: integer("eggs_collected").notNull().default(0),
-    eggsBroken: integer("eggs_broken").notNull().default(0),
-    eggsSold: integer("eggs_sold").notNull().default(0),
+    recordDate: date("record_date", { mode: "string" }).notNull(),
+    eggsCollected: int("eggs_collected").notNull().default(0),
+    eggsBroken: int("eggs_broken").notNull().default(0),
+    eggsSold: int("eggs_sold").notNull().default(0),
     salePricePerTray: decimal("sale_price_per_tray", {
       precision: 10,
       scale: 2,
     }),
     revenue: decimal("revenue", { precision: 12, scale: 2 }).default("0"),
-    mortalityCount: integer("mortality_count").notNull().default(0),
+    mortalityCount: int("mortality_count").notNull().default(0),
     mortalityCause: text("mortality_cause"),
     feedQuantityKg: decimal("feed_quantity_kg", {
       precision: 8,
       scale: 2,
     }).default("0"),
-    feedType: feedTypeEnum("feed_type"),
+    feedType: mysqlEnum(["demarrage", "croissance", "ponte"]),
     feedCost: decimal("feed_cost", { precision: 10, scale: 2 }).default("0"),
-    createdBy: integer("created_by").references(() => users.id),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdBy: int("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().onUpdateNow().notNull(),
   },
   (t) => [
     index("daily_records_cycle_id_idx").on(t.cycleId),
@@ -118,22 +88,22 @@ export const dailyRecords = pgTable(
 );
 
 // Table expenses (dépenses)
-export const expenses = pgTable(
+export const expenses = mysqlTable(
   "expenses",
   {
-    id: serial("id").primaryKey(),
-    cycleId: integer("cycle_id")
+    id: int("id").autoincrement().primaryKey(),
+    cycleId: int("cycle_id")
       .notNull()
       .references(() => cycles.id),
-    buildingId: integer("building_id")
+    buildingId: int("building_id")
       .notNull()
       .references(() => buildings.id),
-    expenseDate: date("expense_date").notNull(),
+    expenseDate: date("expense_date", { mode: "string" }).notNull(),
     label: varchar("label", { length: 200 }).notNull(),
     amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
-    category: expenseCategoryEnum("category").notNull().default("autre"),
-    createdBy: integer("created_by").references(() => users.id),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    category: mysqlEnum(["alimentation", "sante", "energie", "main_oeuvre", "equipement", "autre"]).notNull().default("autre"),
+    createdBy: int("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   },
   (t) => [
     index("expenses_cycle_id_idx").on(t.cycleId),
@@ -142,24 +112,24 @@ export const expenses = pgTable(
 );
 
 // Table sales (ventes)
-export const sales = pgTable(
+export const sales = mysqlTable(
   "sales",
   {
-    id: serial("id").primaryKey(),
-    cycleId: integer("cycle_id")
+    id: int("id").autoincrement().primaryKey(),
+    cycleId: int("cycle_id")
       .notNull()
       .references(() => cycles.id),
-    buildingId: integer("building_id")
+    buildingId: int("building_id")
       .notNull()
       .references(() => buildings.id),
-    saleDate: date("sale_date").notNull(),
-    traysSold: integer("trays_sold").notNull(),
+    saleDate: date("sale_date", { mode: "string" }).notNull(),
+    traysSold: int("trays_sold").notNull(),
     unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
-    clientId: integer("client_id").references(() => clients.id),
+    clientId: int("client_id").references(() => clients.id),
     buyerName: varchar("buyer_name", { length: 200 }),
-    createdBy: integer("created_by").references(() => users.id),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdBy: int("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   },
   (t) => [
     index("sales_cycle_id_idx").on(t.cycleId),
@@ -168,60 +138,60 @@ export const sales = pgTable(
 );
 
 // Table health_records (santé)
-export const healthRecords = pgTable(
+export const healthRecords = mysqlTable(
   "health_records",
   {
-    id: serial("id").primaryKey(),
-    cycleId: integer("cycle_id")
+    id: int("id").autoincrement().primaryKey(),
+    cycleId: int("cycle_id")
       .notNull()
       .references(() => cycles.id),
-    buildingId: integer("building_id")
+    buildingId: int("building_id")
       .notNull()
       .references(() => buildings.id),
-    recordDate: date("record_date").notNull(),
-    type: healthTypeEnum("type").notNull(),
+    recordDate: date("record_date", { mode: "string" }).notNull(),
+    type: mysqlEnum(["vaccination", "medication"]).notNull(),
     productName: varchar("product_name", { length: 200 }).notNull(),
     dose: varchar("dose", { length: 100 }),
     cost: decimal("cost", { precision: 10, scale: 2 }).default("0"),
     notes: text("notes"),
-    createdBy: integer("created_by").references(() => users.id),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdBy: int("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   },
   (t) => [index("health_records_cycle_id_idx").on(t.cycleId)]
 );
 
 // Table feed_stock (stock aliments)
-export const feedStock = pgTable("feed_stock", {
-  id: serial("id").primaryKey(),
-  buildingId: integer("building_id")
+export const feedStock = mysqlTable("feed_stock", {
+  id: int("id").autoincrement().primaryKey(),
+  buildingId: int("building_id")
     .notNull()
     .references(() => buildings.id),
-  movementDate: date("movement_date").notNull(),
-  movementType: feedMovementTypeEnum("movement_type").notNull(),
+  movementDate: date("movement_date", { mode: "string" }).notNull(),
+  movementType: mysqlEnum(["in", "out"]).notNull(),
   quantityKg: decimal("quantity_kg", { precision: 8, scale: 2 }).notNull(),
   unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
   totalCost: decimal("total_cost", { precision: 12, scale: 2 }),
-  feedType: feedTypeEnum("feed_type").notNull(),
+  feedType: mysqlEnum(["demarrage", "croissance", "ponte"]).notNull(),
   notes: text("notes"),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: int("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
 });
 
 // Table clients (acheteurs)
-export const clients = pgTable("clients", {
-  id: serial("id").primaryKey(),
+export const clients = mysqlTable("clients", {
+  id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 200 }).notNull(),
   city: varchar("city", { length: 100 }),
   phone: varchar("phone", { length: 20 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
 });
 
 // Table settings (paramètres)
-export const settings = pgTable("settings", {
+export const settings = mysqlTable("settings", {
   key: varchar("key", { length: 100 }).primaryKey(),
   value: text("value").notNull(),
-  updatedBy: integer("updated_by").references(() => users.id),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: int("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().onUpdateNow().notNull(),
 });
 
 // Relations

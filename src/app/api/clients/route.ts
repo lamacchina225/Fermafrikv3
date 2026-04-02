@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET() {
   const session = await auth();
@@ -39,14 +40,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [newClient] = await db
+    const [{ id: clientId }] = await db
       .insert(clients)
       .values({
         name: name.trim(),
         city: city?.trim() || null,
         phone: phone?.trim() || null,
       })
-      .returning();
+      .$returningId();
+    const [newClient] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
 
     return NextResponse.json({ client: newClient }, { status: 201 });
   } catch (error) {

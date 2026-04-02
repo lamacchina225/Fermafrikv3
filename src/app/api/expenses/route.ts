@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const data = expenseSchema.parse(body);
     const userId = parseInt(session.user.id);
 
-    const inserted = await db
+    const [{ id: expenseId }] = await db
       .insert(expenses)
       .values({
         cycleId: data.cycleId,
@@ -57,9 +57,10 @@ export async function POST(req: NextRequest) {
         category: data.category,
         createdBy: isNaN(userId) ? null : userId,
       })
-      .returning();
+      .$returningId();
+    const [inserted] = await db.select().from(expenses).where(eq(expenses.id, expenseId)).limit(1);
 
-    return NextResponse.json({ success: true, expense: inserted[0] });
+    return NextResponse.json({ success: true, expense: inserted });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Données invalides" }, { status: 400 });
