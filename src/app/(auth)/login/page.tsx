@@ -57,7 +57,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-olive-800 via-olive-700 to-brand-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -138,7 +138,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white h-11"
+              className="w-full h-11 text-white shadow-md"
               loading={isLoading}
             >
               Se connecter
