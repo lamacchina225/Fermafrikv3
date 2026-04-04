@@ -1,5 +1,13 @@
-const CACHE_NAME = "fermafrik-v1";
-const STATIC_ASSETS = ["/", "/saisie", "/ventes", "/stocks", "/manifest.json"];
+const CACHE_NAME = "fermafrik-v2";
+const STATIC_ASSETS = [
+  "/",
+  "/offline",
+  "/saisie",
+  "/ventes",
+  "/stocks",
+  "/manifest.json",
+  "/logo.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -28,10 +36,56 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Ne pas intercepter les requêtes API ou auth
   if (event.request.method !== "GET") return;
-  if (event.request.url.includes("/api/")) return;
-  if (event.request.url.includes("/_next/")) return;
+  const requestUrl = new URL(event.request.url);
+
+  if (requestUrl.origin !== self.location.origin) return;
+  if (requestUrl.pathname.startsWith("/api/auth")) return;
+
+  if (requestUrl.pathname.startsWith("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (!response.ok) return response;
+
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+
+          return new Response(
+            JSON.stringify({
+              offline: true,
+              message: "Donnees indisponibles hors connexion",
+            }),
+            {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        })
+    );
+    return;
+  }
+
+  if (requestUrl.pathname.startsWith("/_next/")) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+
+        return fetch(event.request).then((response) => {
+          if (!response.ok) return response;
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        });
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -48,9 +102,8 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          // Mode offline : retourner la page d'accueil si disponible
           if (event.request.destination === "document") {
-            return caches.match("/");
+            return caches.match("/offline");
           }
         });
     })

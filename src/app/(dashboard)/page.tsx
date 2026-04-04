@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { DollarSign, Egg, Package, TrendingUp, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/layout/Header";
+import { DashboardAlerts } from "@/components/dashboard/DashboardAlerts";
 import { CycleTimeline } from "@/components/timeline/CycleTimeline";
 import { DailySummary } from "@/components/dashboard/DailySummary";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -146,6 +147,14 @@ export default async function DashboardPage() {
         userRole={session?.user?.role}
       />
       <div className="p-6 space-y-6 bg-slate-50">
+        <DashboardAlerts
+          stockPlaquettes={data.stockPlaquettes}
+          tauxPonteVeille={data.tauxPonteVeille}
+          yesterdayEggs={data.yesterdayEggs}
+          effectifVivant={data.effectifVivant}
+          totalMortality={data.totalMortality}
+        />
+
         <CycleTimeline
           startDate={data.cycle.startDate}
           initialCount={data.cycle.initialCount}

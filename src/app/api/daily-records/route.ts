@@ -148,10 +148,23 @@ export async function GET(req: NextRequest) {
     if (!cycle) {
       return NextResponse.json({ error: "Aucun cycle actif" }, { status: 404 });
     }
+
+    const [mortalityAgg] = await db
+      .select({
+        total: sql<number>`COALESCE(SUM(${dailyRecords.mortalityCount}), 0)`,
+      })
+      .from(dailyRecords)
+      .where(eq(dailyRecords.cycleId, cycle.id));
+    const totalMortality = Number(mortalityAgg?.total ?? 0);
+    const effectifVivant = Math.max(0, cycle.initialCount - totalMortality);
+
     return NextResponse.json({
       buildingId: building.id,
       buildingName: building.name,
       cycleId: cycle.id,
+      initialCount: cycle.initialCount,
+      totalMortality,
+      effectifVivant,
     });
   }
 
