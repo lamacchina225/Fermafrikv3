@@ -1,5 +1,5 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -19,8 +19,8 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+const db = drizzle(pool, { schema });
 
 async function check() {
   const buildings = await db.query.buildings.findMany();
@@ -49,4 +49,4 @@ async function check() {
   expenses.forEach(e => console.log(`  ${e.expenseDate} — ${e.label} — ${e.amount} XOF [${e.category}]`));
 }
 
-check().catch(console.error).finally(() => process.exit(0));
+check().catch(console.error).finally(() => pool.end().then(() => process.exit(0)));

@@ -20,8 +20,8 @@
  *   qtyAlv (EggSale)  = plateaux vendus            → = trays_sold
  */
 
-import { neon } from "@neondatabase/serverless";
-import { drizzle as drizzleNew } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle as drizzleNew } from "drizzle-orm/node-postgres";
 import postgres from "postgres";
 import * as schema from "./schema";
 import { eq } from "drizzle-orm";
@@ -54,8 +54,8 @@ const NEW_DB_URL = process.env.DATABASE_URL!;
 const oldSql = postgres(OLD_DB_URL, { ssl: "require", max: 5 });
 
 // Nouvelle DB via Drizzle
-const newSql = neon(NEW_DB_URL);
-const db = drizzleNew(newSql, { schema });
+const newPool = new Pool({ connectionString: NEW_DB_URL });
+const db = drizzleNew(newPool, { schema });
 
 // ─── Mapping catégories dépenses ────────────────────────────────────────────
 function mapCategory(
@@ -348,6 +348,7 @@ async function migrate() {
   console.log(`  Dépenses  : ${expensesToInsert.length}\n`);
 
   await oldSql.end();
+  await newPool.end();
 }
 
 migrate().catch((e) => {

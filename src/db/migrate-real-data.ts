@@ -1,8 +1,8 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
-// Database source (ancienne version)
+// Database source (ancienne version - connexion externe avec SSL)
 const SOURCE_DATABASE_URL = "postgresql://neondb_owner:npg_Jmj80YEVKlTD@ep-autumn-heart-alq7i98q-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
 // Database destination (nouvelle version)
@@ -11,11 +11,11 @@ if (!DEST_DATABASE_URL) {
   throw new Error("DATABASE_URL est requis dans les variables d'environnement");
 }
 
-const sourceSql = neon(SOURCE_DATABASE_URL);
-const sourceDb = drizzle(sourceSql, { schema });
+const sourcePool = new Pool({ connectionString: SOURCE_DATABASE_URL });
+const sourceDb = drizzle(sourcePool, { schema });
 
-const destSql = neon(DEST_DATABASE_URL);
-const destDb = drizzle(destSql, { schema });
+const destPool = new Pool({ connectionString: DEST_DATABASE_URL });
+const destDb = drizzle(destPool, { schema });
 
 async function migrateRealData() {
   console.log("🚀 Début de la migration des données réelles...");
@@ -163,7 +163,9 @@ async function migrateRealData() {
   }
 }
 
-migrateRealData().catch((error) => {
-  console.error("Erreur fatale:", error);
-  process.exit(1);
-});
+migrateRealData()
+  .catch((error) => {
+    console.error("Erreur fatale:", error);
+    process.exit(1);
+  })
+  .finally(() => Promise.all([sourcePool.end(), destPool.end()]).then(() => process.exit(0)));

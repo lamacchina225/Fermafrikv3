@@ -1,12 +1,12 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
-// Database source (ancienne version)
+// Database source (ancienne version - connexion externe avec SSL)
 const SOURCE_DATABASE_URL = "postgresql://neondb_owner:npg_Jmj80YEVKlTD@ep-autumn-heart-alq7i98q-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
-const sourceSql = neon(SOURCE_DATABASE_URL);
-const sourceDb = drizzle(sourceSql, { schema });
+const sourcePool = new Pool({ connectionString: SOURCE_DATABASE_URL });
+const sourceDb = drizzle(sourcePool, { schema });
 
 async function previewData() {
   console.log("📊 Aperçu des données de l'ancienne base de données\n");
@@ -135,4 +135,4 @@ async function previewData() {
   }
 }
 
-previewData();
+previewData().finally(() => sourcePool.end().then(() => process.exit(0)));
