@@ -92,6 +92,10 @@ export default function LoginPage() {
                   id="username"
                   type="text"
                   placeholder="admin"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="username"
+                  spellCheck={false}
                   className={`flex h-10 w-full rounded-lg border bg-white pl-10 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400
                     focus:outline-none focus:ring-2 focus:ring-primary-600/20 focus:border-primary-600 transition-colors
                     ${errors.username ? "border-red-400" : "border-gray-200"}`}
