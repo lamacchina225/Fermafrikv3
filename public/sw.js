@@ -1,4 +1,4 @@
-const CACHE_NAME = "fermafrik-v2";
+const CACHE_NAME = "fermafrik-v3";
 const STATIC_ASSETS = [
   "/",
   "/offline",
@@ -87,25 +87,36 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(event.request)
+  if (event.request.destination === "document") {
+    event.respondWith(
+      fetch(event.request)
         .then((response) => {
           if (!response.ok) return response;
 
           const clone = response.clone();
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           return response;
         })
-        .catch(() => {
-          if (event.request.destination === "document") {
-            return caches.match("/offline");
-          }
-        });
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return caches.match("/offline");
+        })
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(event.request).then((response) => {
+        if (!response.ok) return response;
+
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      });
     })
   );
 });
