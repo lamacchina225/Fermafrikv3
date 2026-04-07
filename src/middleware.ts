@@ -12,6 +12,8 @@ export default auth((req) => {
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next/") ||
     nextUrl.pathname === "/favicon.ico" ||
+    nextUrl.pathname === "/sw.js" ||
+    nextUrl.pathname === "/offline" ||
     nextUrl.pathname.startsWith("/manifest") ||
     nextUrl.pathname.startsWith("/logo") ||
     nextUrl.pathname.startsWith("/apple-icon") ||
