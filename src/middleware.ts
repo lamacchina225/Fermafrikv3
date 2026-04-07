@@ -27,6 +27,10 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  if (isPublicAsset) {
+    return NextResponse.next();
+  }
+
   if (!isLoggedIn && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", nextUrl));
   }
