@@ -118,7 +118,7 @@ export default async function DemoPage() {
           <div className="demo-rise flex items-start justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#b9c7ad] bg-white/85 px-4 py-2 text-sm text-[#47623d] shadow-sm backdrop-blur">
               <Sparkles className="h-4 w-4" />
-              Demo guidee de Ferm'Afrik
+              Demo guidee de Ferm&apos;Afrik
             </div>
             <form action={exitDemo}>
               <button
@@ -136,14 +136,14 @@ export default async function DemoPage() {
             <div className="space-y-6">
               <div className="demo-rise demo-rise-delay-1 space-y-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a6b20]">
-                  Mieux gerer l'elevage, plus simplement
+                  Mieux gerer l&apos;elevage, plus simplement
                 </p>
                 <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-[#203321] sm:text-5xl lg:text-6xl">
                   Suivez votre activite, saisissez vos donnees du jour et retrouvez vos rapports sans complexite.
                 </h1>
                 <p className="max-w-2xl text-lg leading-8 text-[#52624f]">
-                  Cette demo vous montre comment l'application aide votre equipe
-                  a travailler plus vite, mieux suivre l'elevage et prendre des
+                  Cette demo vous montre comment l&apos;application aide votre equipe
+                  a travailler plus vite, mieux suivre l&apos;elevage et prendre des
                   decisions avec des ecrans clairs et faciles a utiliser.
                 </p>
               </div>
@@ -160,7 +160,7 @@ export default async function DemoPage() {
                   href="#modules"
                   className="inline-flex h-12 items-center justify-center rounded-lg border border-white/30 bg-white/75 px-6 text-base font-medium text-[#27432b] transition hover:bg-white"
                 >
-                  Comprendre ce que fait l'app
+                  Comprendre ce que fait l&apos;app
                 </Link>
               </div>
 
@@ -256,14 +256,14 @@ export default async function DemoPage() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-8 max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a6b20]">
-              Apercus de l'application
+              Apercus de l&apos;application
             </p>
             <h2 className="mt-3 text-3xl font-semibold text-[#243726] sm:text-4xl">
               Les ecrans principaux, presentes avec des informations factices pour la demonstration.
             </h2>
             <p className="mt-3 text-base leading-7 text-[#566253]">
-              Vous voyez ici le style reel de l'application, mais avec des donnees
-              de presentation pour montrer l'experience sans afficher les chiffres d'exploitation.
+              Vous voyez ici le style reel de l&apos;application, mais avec des donnees
+              de presentation pour montrer l&apos;experience sans afficher les chiffres d&apos;exploitation.
             </p>
           </div>
 
@@ -296,7 +296,7 @@ export default async function DemoPage() {
                 </div>
               </FakeWindow>
               <p className="px-2 text-sm leading-6 text-[#556352]">
-                Le tableau de bord aide a voir l'essentiel tout de suite: activite, stock, production et points d'attention.
+                Le tableau de bord aide a voir l&apos;essentiel tout de suite: activite, stock, production et points d&apos;attention.
               </p>
             </div>
 
@@ -305,7 +305,7 @@ export default async function DemoPage() {
                 <div className="rounded-xl border border-[#edf0e8] bg-[#fbfcfa] p-3 sm:rounded-2xl sm:p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-[#243726]">Date de saisie</p>
-                    <span className="rounded-full bg-[#eef4e8] px-3 py-1 text-xs text-[#3a6137]">Aujourd'hui</span>
+                    <span className="rounded-full bg-[#eef4e8] px-3 py-1 text-xs text-[#3a6137]">Aujourd&apos;hui</span>
                   </div>
                   <div className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3">
                     {formRows.map((row) => (
@@ -328,7 +328,7 @@ export default async function DemoPage() {
                 </div>
               </FakeWindow>
               <p className="px-2 text-sm leading-6 text-[#556352]">
-                La saisie reste rapide et guidee pour que l'equipe enregistre les bonnes informations sans friction.
+                La saisie reste rapide et guidee pour que l&apos;equipe enregistre les bonnes informations sans friction.
               </p>
             </div>
 
@@ -357,7 +357,7 @@ export default async function DemoPage() {
                 </div>
               </FakeWindow>
               <p className="px-2 text-sm leading-6 text-[#556352]">
-                Les rapports rassemblent l'historique et facilitent la lecture des resultats, des ventes et des depenses.
+                Les rapports rassemblent l&apos;historique et facilitent la lecture des resultats, des ventes et des depenses.
               </p>
             </div>
           </div>
@@ -368,7 +368,7 @@ export default async function DemoPage() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-8 max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a6b20]">
-              Ce que l'app vous apporte
+              Ce que l&apos;app vous apporte
             </p>
             <h2 className="mt-3 text-3xl font-semibold text-[#243726] sm:text-4xl">
               Un outil unique pour suivre le terrain, mieux piloter et gagner du temps.
@@ -398,7 +398,7 @@ export default async function DemoPage() {
       <section className="px-5 pb-14 sm:px-8 lg:px-12">
         <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[28px] bg-[#243b23] p-7 text-white shadow-[0_26px_70px_-45px_rgba(24,38,24,0.8)]">
-            <p className="text-sm uppercase tracking-[0.22em] text-[#d2c487]">Comment l'equipe l'utilise</p>
+            <p className="text-sm uppercase tracking-[0.22em] text-[#d2c487]">Comment l&apos;equipe l&apos;utilise</p>
             <div className="mt-6 space-y-5">
               {[
                 "Le terrain saisit la production, l'aliment et les incidents du jour.",
