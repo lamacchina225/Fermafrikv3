@@ -265,6 +265,45 @@ body, #__next {
   }
 }
 
+@keyframes demo-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -10px, 0); }
+}
+
+@keyframes demo-glow {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.06); }
+}
+
+@keyframes demo-rise {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.demo-float {
+  animation: demo-float 8s ease-in-out infinite;
+}
+
+.demo-glow {
+  animation: demo-glow 7s ease-in-out infinite;
+}
+
+.demo-rise {
+  animation: demo-rise 0.8s ease-out both;
+}
+
+.demo-rise-delay-1 {
+  animation-delay: 0.12s;
+}
+
+.demo-rise-delay-2 {
+  animation-delay: 0.24s;
+}
+
+.demo-rise-delay-3 {
+  animation-delay: 0.36s;
+}
+
 /* Print styles */
 @media print {
   .no-print {
