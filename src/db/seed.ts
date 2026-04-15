@@ -1,5 +1,5 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as bcrypt from "bcryptjs";
 import * as schema from "./schema";
 import { eq } from "drizzle-orm";
@@ -9,8 +9,8 @@ if (!DATABASE_URL) {
   throw new Error("DATABASE_URL est requis dans les variables d'environnement");
 }
 
-const sql = neon(DATABASE_URL);
-const db = drizzle(sql, { schema });
+const pool = new Pool({ connectionString: DATABASE_URL });
+const db = drizzle(pool, { schema });
 
 async function seed() {
   console.log("Démarrage du seeding...");
@@ -97,7 +97,9 @@ async function seed() {
   console.log("Seeding terminé avec succès !");
 }
 
-seed().catch((error) => {
-  console.error("Erreur lors du seeding :", error);
-  process.exit(1);
-});
+seed()
+  .catch((error) => {
+    console.error("Erreur lors du seeding :", error);
+    process.exit(1);
+  })
+  .finally(() => pool.end());

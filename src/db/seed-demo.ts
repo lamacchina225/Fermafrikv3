@@ -1,5 +1,5 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -21,8 +21,8 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+const db = drizzle(pool, { schema });
 
 function rnd(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -216,4 +216,4 @@ async function seedDemo() {
   console.log(`  - ${expInsert.length} dépenses`);
 }
 
-seedDemo().catch(console.error).finally(() => process.exit(0));
+seedDemo().catch(console.error).finally(() => pool.end().then(() => process.exit(0)));

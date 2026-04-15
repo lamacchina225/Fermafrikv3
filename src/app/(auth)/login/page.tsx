@@ -58,7 +58,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-olive-800 via-olive-700 to-brand-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -93,6 +93,10 @@ export default function LoginPage() {
                   id="username"
                   type="text"
                   placeholder="admin"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="username"
+                  spellCheck={false}
                   className={`flex h-10 w-full rounded-lg border bg-white pl-10 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400
                     focus:outline-none focus:ring-2 focus:ring-primary-600/20 focus:border-primary-600 transition-colors
                     ${errors.username ? "border-red-400" : "border-gray-200"}`}
@@ -139,7 +143,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white h-11"
+              className="w-full h-11 text-white shadow-md"
               loading={isLoading}
             >
               Se connecter

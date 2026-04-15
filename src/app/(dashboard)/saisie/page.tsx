@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,6 +54,15 @@ interface RecentRecord {
   feedCost: string | null;
 }
 
+interface BuildingInfo {
+  buildingId: number;
+  cycleId: number;
+  buildingName: string;
+  initialCount: number;
+  totalMortality: number;
+  effectifVivant: number;
+}
+
 const sections = [
   { id: "oeufs", title: "Oeufs & Récolte", icon: Egg, color: "yellow" },
   { id: "troupeau", title: "Troupeau & Mortalité", icon: AlertTriangle, color: "red" },
@@ -79,15 +88,16 @@ export default function SaisiePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
 
   const readonly = !canWrite(session?.user?.role);
 
   // SWR remplace les useEffect + fetch manuels
-  const { data: buildingInfo } = useSWR<{
-    buildingId: number;
-    cycleId: number;
-    buildingName: string;
-  }>(INFO_KEY, fetcher, { revalidateOnFocus: false });
+  const { data: buildingInfo, mutate: mutateBuildingInfo } = useSWR<BuildingInfo>(
+    INFO_KEY,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
 
   const { data: recentData } = useSWR<{ records: RecentRecord[] }>(
     RECENT_KEY,
@@ -98,6 +108,8 @@ export default function SaisiePage() {
   const recentRecords = [...(recentData?.records ?? [])].sort((a, b) =>
     b.recordDate.localeCompare(a.recordDate)
   );
+
+  const editingRecord = recentRecords.find((record) => record.id === editingRecordId) ?? null;
 
   const {
     register, handleSubmit, setValue, watch, reset,
@@ -123,6 +135,7 @@ export default function SaisiePage() {
   };
 
   const handleEditSetup = (rec: RecentRecord) => {
+    setEditingRecordId(rec.id);
     setValue("recordDate", rec.recordDate);
     setValue("eggsCollected", rec.eggsCollected);
     setValue("eggsBroken", rec.eggsBroken);
@@ -135,6 +148,19 @@ export default function SaisiePage() {
     toast.info(`Édition du ${format(new Date(rec.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })}`);
   };
 
+  const currentMortalityValue = Number(watch("mortalityCount") ?? 0);
+  const adjustedTotalMortality = useMemo(() => {
+    if (!buildingInfo) return 0;
+
+    const previousMortality = editingRecord?.mortalityCount ?? 0;
+    return Math.max(0, buildingInfo.totalMortality - previousMortality + currentMortalityValue);
+  }, [buildingInfo, currentMortalityValue, editingRecord?.mortalityCount]);
+
+  const projectedEffectif = useMemo(() => {
+    if (!buildingInfo) return 0;
+    return Math.max(0, buildingInfo.initialCount - adjustedTotalMortality);
+  }, [adjustedTotalMortality, buildingInfo]);
+
   const handleDelete = async (id: number) => {
     setIsDeleting(true);
     try {
@@ -142,7 +168,9 @@ export default function SaisiePage() {
       if (!res.ok) throw new Error("Erreur lors de la suppression");
       toast.success("Saisie supprimée");
       setDeleteConfirmId(null);
+      setEditingRecordId((current) => (current === id ? null : current));
       mutate(RECENT_KEY);
+      mutateBuildingInfo();
     } catch {
       toast.error("Erreur lors de la suppression");
     } finally {
@@ -195,8 +223,10 @@ export default function SaisiePage() {
         eggsCollected: 0, eggsBroken: 0, mortalityCount: 0,
         feedQuantityKg: 0, feedCost: 0,
       });
+      setEditingRecordId(null);
       setOpenSections(["oeufs"]);
       mutate(RECENT_KEY);
+      mutateBuildingInfo();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     } finally {
@@ -221,11 +251,41 @@ export default function SaisiePage() {
         )}
 
         {buildingInfo && (
-          <div className="mb-4 p-3 bg-primary-50 border border-primary-100 rounded-lg flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-primary-600" />
-            <span className="text-sm text-primary-700 font-medium">
-              {buildingInfo.buildingName}
-            </span>
+          <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary-600" />
+              <span className="text-sm font-medium text-primary-700">
+                {buildingInfo.buildingName}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-white/80 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Effectif initial</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatNumber(buildingInfo.initialCount)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-white/80 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Poules vivantes actuellement</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatNumber(buildingInfo.effectifVivant)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-white/80 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  {editingRecord ? "Effectif apres modification" : "Effectif apres cette saisie"}
+                </p>
+                <p className="mt-1 text-lg font-semibold text-amber-700">
+                  {formatNumber(projectedEffectif)}
+                </p>
+              </div>
+            </div>
+            {editingRecord && (
+              <p className="mt-3 text-xs text-slate-600">
+                Modification du {format(new Date(editingRecord.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })} :
+                l&apos;effectif projete tient compte de l&apos;ancienne mortalite deja enregistree.
+              </p>
+            )}
           </div>
         )}
 

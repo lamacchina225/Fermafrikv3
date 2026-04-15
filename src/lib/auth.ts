@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { loginLimiter } from "@/lib/rate-limit";
+import { authConfig } from "./auth.config";
 
 async function findUser(username: string) {
   const { db } = await import("@/db");
@@ -15,6 +16,7 @@ async function findUser(username: string) {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -60,32 +62,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.role = (user as { role?: string }).role;
-        token.id = user.id;
-        token.farmId = (user as { farmId?: string | null }).farmId ?? null;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token) {
-        session.user.role = token.role as string;
-        session.user.id = token.id as string;
-        session.user.farmId = (token.farmId as string) ?? null;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60,
-  },
 });
 
 declare module "next-auth" {

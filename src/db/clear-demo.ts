@@ -3,8 +3,8 @@
  * Conserve : utilisateurs, bâtiments, cycles, paramètres, clients
  * Supprime  : saisies journalières, ventes, dépenses, santé, stock aliments
  */
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -24,8 +24,8 @@ function loadEnv() {
 }
 loadEnv();
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+const db = drizzle(pool, { schema });
 
 async function clearDemo() {
   console.log("Suppression des données de démo...");
@@ -45,4 +45,4 @@ async function clearDemo() {
   console.log("Base prête pour les vraies données !");
 }
 
-clearDemo().catch(console.error).finally(() => process.exit(0));
+clearDemo().catch(console.error).finally(() => pool.end().then(() => process.exit(0)));

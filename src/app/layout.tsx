@@ -4,6 +4,8 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { SessionProvider } from "@/lib/session-provider";
 import { PwaRegister } from "@/components/PwaRegister";
+import { AppStartupScreen } from "@/components/AppStartupScreen";
+import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -58,6 +60,8 @@ export default function RootLayout({
         <link rel="mask-icon" href="/api/icon?size=512" color="#2d6a4f" />
       </head>
       <body className={inter.className}>
+        <AppStartupScreen />
+        <ConnectivityBanner />
         <SessionProvider>
           {children}
         </SessionProvider>
