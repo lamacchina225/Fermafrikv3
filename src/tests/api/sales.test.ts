@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { NextRequest } from "next/server";
-import { POST } from "@/app/api/sales/route";
+import { GET, POST } from "@/app/api/sales/route";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
 
-function makeRequest(body: object): NextRequest {
+function makeRequest(body: object, method = "POST"): NextRequest {
   return new NextRequest("http://localhost/api/sales", {
-    method: "POST",
+    method,
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function makeGetRequest(query = ""): NextRequest {
+  return new NextRequest(`http://localhost/api/sales${query}`, { method: "GET" });
 }
 
 const validSale = {
@@ -34,32 +38,50 @@ describe("POST /api/sales", () => {
   });
 
   it("retourne 403 pour le rôle demo", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "3", role: "demo", name: "demo" } } as never);
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "3", role: "demo", name: "demo", farmId: "1" },
+    } as never);
+    const res = await POST(makeRequest(validSale));
+    expect(res.status).toBe(403);
+  });
+
+  it("retourne 403 si pas de farmId", async () => {
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: null },
+    } as never);
     const res = await POST(makeRequest(validSale));
     expect(res.status).toBe(403);
   });
 
   it("retourne 400 si traysSold < 1", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
     const res = await POST(makeRequest({ ...validSale, traysSold: 0 }));
     expect(res.status).toBe(400);
   });
 
   it("retourne 400 si saleDate dépasse 10 chars", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
     const res = await POST(makeRequest({ ...validSale, saleDate: "2026-03-31T12:00:00Z" }));
     expect(res.status).toBe(400);
   });
 
   it("retourne 400 si buyerName dépasse 200 chars", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
     const res = await POST(makeRequest({ ...validSale, buyerName: "A".repeat(201) }));
     expect(res.status).toBe(400);
   });
 
-  it("crée une vente valide et retourne 201", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
-    const newSale = { id: 5, ...validSale, totalAmount: "35000", unitPrice: "3500" };
+  it("crée une vente valide et retourne 200", async () => {
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
+    const newSale = { id: 5, ...validSale, totalAmount: "35000", unitPrice: "3500", farmId: 1 };
     (mockDb.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockResolvedValueOnce([newSale]),

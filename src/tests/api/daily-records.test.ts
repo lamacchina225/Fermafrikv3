@@ -34,25 +34,25 @@ describe("POST /api/daily-records", () => {
   });
 
   it("retourne 403 pour le rôle demo (lecture seule)", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "3", role: "demo", name: "demo" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "3", role: "demo", name: "demo", farmId: "1" } } as never);
     const res = await POST(makePostRequest(validPayload));
     expect(res.status).toBe(403);
   });
 
   it("retourne 400 si les données sont invalides (oeufs négatifs)", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const res = await POST(makePostRequest({ ...validPayload, eggsCollected: -10 }));
     expect(res.status).toBe(400);
   });
 
   it("retourne 400 si recordDate dépasse 10 chars", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const res = await POST(makePostRequest({ ...validPayload, recordDate: "2026-03-31T00:00:00Z" }));
     expect(res.status).toBe(400);
   });
 
   it("crée une saisie avec des données valides", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce(null);
     (mockDb.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockReturnValue({
@@ -67,7 +67,7 @@ describe("POST /api/daily-records", () => {
   });
 
   it("met à jour si une saisie existe déjà pour ce jour", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce({ id: 10 });
     (mockDb.update as ReturnType<typeof vi.fn>).mockReturnValue({
       set: vi.fn().mockReturnValue({

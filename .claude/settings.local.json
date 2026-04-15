@@ -21,7 +21,9 @@
       "Bash(grep -n \"console.error\" src/app/api/**/*.ts)",
       "Bash(node -e \"const crypto = require\\(''crypto''\\); console.log\\(crypto.randomBytes\\(32\\).toString\\(''base64''\\)\\);\")",
       "Bash(npx drizzle-kit:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(DATABASE_URL=\"postgresql://fake:fake@localhost:5432/fake\" AUTH_SECRET=\"ci-test-secret\" npm run build)",
+      "Bash(npx next *)"
     ]
   }
 }

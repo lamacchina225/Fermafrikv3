@@ -28,6 +28,7 @@ async function migrateRealData() {
       if (sourceSales.length > 0) {
         await destDb.insert(schema.sales).values(
           sourceSales.map(s => ({
+            farmId: s.farmId,
             cycleId: s.cycleId,
             buildingId: s.buildingId,
             saleDate: s.saleDate,
@@ -54,6 +55,7 @@ async function migrateRealData() {
       if (sourceDailyRecords.length > 0) {
         await destDb.insert(schema.dailyRecords).values(
           sourceDailyRecords.map(d => ({
+            farmId: d.farmId,
             cycleId: d.cycleId,
             buildingId: d.buildingId,
             recordDate: d.recordDate,
@@ -85,6 +87,7 @@ async function migrateRealData() {
       if (sourceExpenses.length > 0) {
         await destDb.insert(schema.expenses).values(
           sourceExpenses.map(e => ({
+            farmId: e.farmId,
             cycleId: e.cycleId,
             buildingId: e.buildingId,
             expenseDate: e.expenseDate,

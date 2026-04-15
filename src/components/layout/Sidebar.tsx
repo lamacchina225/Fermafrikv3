@@ -6,7 +6,7 @@ import { signOut } from "next-auth/react";
 import Image from "next/image";
 import {
   LayoutDashboard, ClipboardList, ShoppingCart, Heart,
-  Users, BarChart3, Settings, LogOut, ChevronRight,
+  Users, BarChart3, Settings, LogOut, ChevronRight, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ const navItems = [
   { href: "/stocks",        label: "Clients",            icon: Users },
   { href: "/rapports",      label: "Rapports",           icon: BarChart3 },
   { href: "/administration",label: "Administration",     icon: Settings },
+  { href: "/compte",        label: "Mon compte",         icon: UserCircle },
 ];
 
 interface SidebarProps {
@@ -31,7 +32,7 @@ export function Sidebar({ userRole, username }: SidebarProps) {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 flex-col z-30 shadow-xl hidden md:flex"
+    <aside className="fixed left-0 top-0 h-full w-64 flex-col z-30 shadow-xl hidden md:flex" role="navigation" aria-label="Menu lateral"
       style={{ background: "linear-gradient(180deg, #2e3f1c 0%, #3d5426 60%, #4a6928 100%)" }}
     >
       {/* Logo */}
@@ -48,7 +49,7 @@ export function Sidebar({ userRole, username }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="Navigation principale">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);

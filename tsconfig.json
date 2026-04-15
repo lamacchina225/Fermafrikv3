@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
-    "src/db/migrate-from-v2.ts"
+    "src/db/migrate-from-v2.ts",
+    "src/db/migrate-real-data.ts"
   ]
 }

@@ -20,21 +20,23 @@ describe("GET /api/clients", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await GET();
+    const res = await GET(makeRequest());
     expect(res.status).toBe(401);
     const json = await res.json();
     expect(json.error).toBe("Non autorisé");
   });
 
   it("retourne la liste des clients si authentifié", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const fakeClients = [{ id: 1, name: "Client A", city: "Abidjan", phone: null, createdAt: new Date() }];
     (mockDb.select as ReturnType<typeof vi.fn>).mockReturnValue({
       from: vi.fn().mockReturnValue({
-        orderBy: vi.fn().mockResolvedValueOnce(fakeClients),
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockResolvedValueOnce(fakeClients),
+        }),
       }),
     });
-    const res = await GET();
+    const res = await GET(makeRequest());
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.clients).toHaveLength(1);
@@ -52,13 +54,13 @@ describe("POST /api/clients", () => {
   });
 
   it("retourne 400 si le nom est vide", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
-    const res = await POST(makeRequest("POST", { name: "  " }));
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
+    const res = await POST(makeRequest("POST", { name: "" }));
     expect(res.status).toBe(400);
   });
 
   it("crée un client avec un nom valide", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const newClient = { id: 2, name: "Kouassi", city: "Yamoussoukro", phone: null, createdAt: new Date() };
     (mockDb.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockReturnValue({

@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { DateNavigator } from "@/components/ventes/DateNavigator";
 import { SalesMetrics } from "@/components/ventes/SalesMetrics";
 import { SalesList } from "@/components/ventes/SalesList";
-import { canWrite, formatXOF, isAdmin } from "@/lib/utils";
+import { canWrite, formatXOF, isAdmin, EGGS_PER_TRAY } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -337,7 +337,7 @@ export default function VentesPage() {
                       <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
                       <div>
                         <p className="font-bold text-emerald-800 text-lg">{formatXOF(estimatedTotal)}</p>
-                        <p className="text-xs text-emerald-600">{traysSold} plaquettes · {traysSold * 30} œufs</p>
+                        <p className="text-xs text-emerald-600">{traysSold} plaquettes · {traysSold * EGGS_PER_TRAY} œufs</p>
                       </div>
                     </div>
                   )}

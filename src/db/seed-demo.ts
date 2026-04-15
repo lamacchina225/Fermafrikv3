@@ -46,6 +46,7 @@ async function seedDemo() {
     where: eq(schema.buildings.status, "active"),
   });
   if (!building) throw new Error("Aucun bâtiment actif");
+  const farmId = building.farmId;
 
   const cycle = await db.query.cycles.findFirst({
     where: eq(schema.cycles.buildingId, building.id),
@@ -80,6 +81,7 @@ async function seedDemo() {
   for (const month of months) {
     // Alimentation mensuelle (achat de sacs)
     expInsert.push({
+      farmId,
       cycleId: cycle.id,
       buildingId: building.id,
       expenseDate: `${month}-05`,
@@ -90,6 +92,7 @@ async function seedDemo() {
     });
     // Main d'œuvre
     expInsert.push({
+      farmId,
       cycleId: cycle.id,
       buildingId: building.id,
       expenseDate: `${month}-28`,
@@ -100,6 +103,7 @@ async function seedDemo() {
     });
     // Énergie
     expInsert.push({
+      farmId,
       cycleId: cycle.id,
       buildingId: building.id,
       expenseDate: `${month}-10`,
@@ -111,17 +115,17 @@ async function seedDemo() {
   }
   // Dépenses santé ponctuelles
   expInsert.push({
-    cycleId: cycle.id, buildingId: building.id,
+    farmId, cycleId: cycle.id, buildingId: building.id,
     expenseDate: "2025-12-03", label: "Vaccin Newcastle (rappel)", amount: "18500",
     category: "sante" as const, createdBy: 1,
   });
   expInsert.push({
-    cycleId: cycle.id, buildingId: building.id,
+    farmId, cycleId: cycle.id, buildingId: building.id,
     expenseDate: "2026-01-15", label: "Traitement antibiotique préventif", amount: "12000",
     category: "sante" as const, createdBy: 1,
   });
   expInsert.push({
-    cycleId: cycle.id, buildingId: building.id,
+    farmId, cycleId: cycle.id, buildingId: building.id,
     expenseDate: "2026-02-08", label: "Désinfectant poulailler", amount: "8500",
     category: "sante" as const, createdBy: 1,
   });
@@ -150,6 +154,7 @@ async function seedDemo() {
     stockOeufsAccumules += eggsCollected - eggsBroken;
 
     drInsert.push({
+      farmId,
       cycleId: cycle.id,
       buildingId: building.id,
       recordDate: dateStr,
@@ -172,6 +177,7 @@ async function seedDemo() {
       if (plaquettes >= 3) {
         const unitPrice = 7000;
         salInsert.push({
+          farmId,
           cycleId: cycle.id,
           buildingId: building.id,
           saleDate: dateStr,

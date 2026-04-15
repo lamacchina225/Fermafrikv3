@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { sales, clients, expenses, buildings, cycles } from "@/db/schema";
+import { sales, clients, expenses } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite } from "@/lib/utils";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
+import { handleApiError } from "@/lib/api-error";
 
 const linkedExpenseSchema = z.object({
   type: z.enum(["transport", "plateaux", "autre"]),
@@ -23,7 +23,6 @@ const saleSchema = z.object({
   linkedExpense: linkedExpenseSchema.optional(),
 });
 
-// Mapping type de dépense liée → catégorie DB
 function expenseTypeToCategory(
   type: "transport" | "plateaux" | "autre"
 ): "autre" | "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" {
@@ -41,17 +40,13 @@ function expenseTypeToLabel(type: "transport" | "plateaux" | "autre"): string {
   return labels[type] ?? "Autre";
 }
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
+async function handleGet(req: NextRequest, ctx: AuthContext) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
 
+  const farmFilter = eq(sales.farmId, ctx.farmId);
+
   if (date) {
-    // Ventes d'un jour précis
     const salesOfDay = await db
       .select({
         id: sales.id,
@@ -70,13 +65,17 @@ export async function GET(req: NextRequest) {
       })
       .from(sales)
       .leftJoin(clients, eq(sales.clientId, clients.id))
-      .where(eq(sales.saleDate, date))
+      .where(and(farmFilter, eq(sales.saleDate, date)))
       .orderBy(desc(sales.createdAt));
 
     return NextResponse.json({ sales: salesOfDay });
   }
 
-  // Toutes les ventes (comportement d'origine)
+  const limitParam = searchParams.get("limit");
+  const offsetParam = searchParams.get("offset");
+  const limit = Math.min(Math.max(parseInt(limitParam ?? "100", 10) || 100, 1), 500);
+  const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
+
   const allSales = await db
     .select({
       id: sales.id,
@@ -95,35 +94,28 @@ export async function GET(req: NextRequest) {
     })
     .from(sales)
     .leftJoin(clients, eq(sales.clientId, clients.id))
-    .orderBy(desc(sales.saleDate));
+    .where(farmFilter)
+    .orderBy(desc(sales.saleDate))
+    .limit(limit)
+    .offset(offset);
 
   return NextResponse.json({ sales: allSales });
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-  if (!canWrite(session.user.role)) {
-    return NextResponse.json(
-      { error: "Mode démo : lecture seule" },
-      { status: 403 }
-    );
-  }
+async function handlePost(req: NextRequest, ctx: AuthContext) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
 
   try {
     const body = await req.json();
     const data = saleSchema.parse(body);
 
     const totalAmount = data.traysSold * data.unitPrice;
-    const userId = parseInt(session.user.id);
-    const createdBy = isNaN(userId) ? null : userId;
 
-    // Créer la vente
     const inserted = await db
       .insert(sales)
       .values({
+        farmId: ctx.farmId,
         cycleId: data.cycleId,
         buildingId: data.buildingId,
         saleDate: data.saleDate,
@@ -132,14 +124,14 @@ export async function POST(req: NextRequest) {
         totalAmount: totalAmount.toString(),
         clientId: data.clientId ?? null,
         buyerName: data.buyerName || null,
-        createdBy,
+        createdBy: ctx.userId,
       })
       .returning();
 
-    // Si une dépense liée est fournie, la créer aussi
     if (data.linkedExpense) {
       const { type, amount, note } = data.linkedExpense;
       await db.insert(expenses).values({
+        farmId: ctx.farmId,
         cycleId: data.cycleId,
         buildingId: data.buildingId,
         expenseDate: data.saleDate,
@@ -148,19 +140,15 @@ export async function POST(req: NextRequest) {
           : expenseTypeToLabel(type),
         amount: amount.toString(),
         category: expenseTypeToCategory(type),
-        createdBy,
+        createdBy: ctx.userId,
       });
     }
 
     return NextResponse.json({ success: true, sale: inserted[0] });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Données invalides", details: error.errors },
-        { status: 400 }
-      );
-    }
-    console.error("Erreur vente:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return handleApiError(error, "vente");
   }
 }
+
+export const GET = withAuth(handleGet);
+export const POST = withAuth(handlePost);

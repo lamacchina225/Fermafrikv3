@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   X,
+  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -29,6 +30,7 @@ const moreNav = [
   { href: "/sante", label: "Santé", icon: Heart },
   { href: "/rapports", label: "Rapports", icon: BarChart3 },
   { href: "/administration", label: "Administration", icon: Settings },
+  { href: "/compte", label: "Mon compte", icon: UserCircle },
 ];
 
 interface BottomNavProps {
@@ -64,6 +66,7 @@ export function BottomNav({ userRole }: BottomNavProps) {
             <button
               onClick={() => setMoreOpen(false)}
               className="p-1 rounded-full text-gray-400 hover:bg-gray-100"
+              aria-label="Fermer le menu"
             >
               <X className="h-4 w-4" />
             </button>
@@ -112,6 +115,7 @@ export function BottomNav({ userRole }: BottomNavProps) {
       <nav
         className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        aria-label="Navigation mobile"
       >
         <div className="flex items-center justify-around h-[60px]">
           {mainNav.map((item) => {
@@ -152,6 +156,8 @@ export function BottomNav({ userRole }: BottomNavProps) {
           <button
             onClick={() => setMoreOpen(!moreOpen)}
             className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-all active:scale-95"
+            aria-label="Afficher plus d'options"
+            aria-expanded={moreOpen}
           >
             <div
               className={cn(

@@ -21,6 +21,7 @@ vi.mock("@/db", () => ({
   db: {
     query: {
       users: { findFirst: vi.fn() },
+      farms: { findFirst: vi.fn(), findMany: vi.fn() },
       buildings: { findFirst: vi.fn(), findMany: vi.fn() },
       cycles: { findFirst: vi.fn(), findMany: vi.fn() },
       dailyRecords: { findFirst: vi.fn(), findMany: vi.fn() },
@@ -29,6 +30,7 @@ vi.mock("@/db", () => ({
       clients: { findFirst: vi.fn(), findMany: vi.fn() },
       settings: { findMany: vi.fn() },
       healthRecords: { findMany: vi.fn() },
+      feedStock: { findMany: vi.fn() },
     },
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),

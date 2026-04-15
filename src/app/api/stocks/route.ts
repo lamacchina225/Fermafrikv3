@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { feedStock, dailyRecords, sales, buildings, cycles } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite } from "@/lib/utils";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
+import { handleApiError } from "@/lib/api-error";
+import { EGGS_PER_TRAY } from "@/lib/utils";
 
 const feedStockSchema = z.object({
   buildingId: z.number(),
@@ -17,24 +18,19 @@ const feedStockSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
+async function handleGet(req: NextRequest, ctx: AuthContext) {
   const { searchParams } = new URL(req.url);
   const summary = searchParams.get("summary");
 
   if (summary === "true") {
-    // Résumé stock oeufs
     const building = await db.query.buildings.findFirst({
-      where: eq(buildings.status, "active"),
+      where: and(eq(buildings.farmId, ctx.farmId), eq(buildings.status, "active")),
     });
     if (!building) return NextResponse.json({});
 
     const cycle = await db.query.cycles.findFirst({
-      where: eq(cycles.buildingId, building.id),
+      where: and(eq(cycles.farmId, ctx.farmId), eq(cycles.buildingId, building.id)),
+      orderBy: desc(cycles.id),
     });
     if (!cycle) return NextResponse.json({});
 
@@ -44,19 +40,19 @@ export async function GET(req: NextRequest) {
         totalBroken: sql<number>`COALESCE(SUM(${dailyRecords.eggsBroken}), 0)`,
       })
       .from(dailyRecords)
-      .where(eq(dailyRecords.cycleId, cycle.id));
+      .where(and(eq(dailyRecords.farmId, ctx.farmId), eq(dailyRecords.cycleId, cycle.id)));
 
     const salesAgg = await db
       .select({
         totalTrays: sql<number>`COALESCE(SUM(${sales.traysSold}), 0)`,
       })
       .from(sales)
-      .where(eq(sales.cycleId, cycle.id));
+      .where(and(eq(sales.farmId, ctx.farmId), eq(sales.cycleId, cycle.id)));
 
     const totalEggs = Number(eggsAgg[0]?.totalEggs ?? 0);
     const totalBroken = Number(eggsAgg[0]?.totalBroken ?? 0);
     const totalTrays = Number(salesAgg[0]?.totalTrays ?? 0);
-    const totalSoldEggs = totalTrays * 30;
+    const totalSoldEggs = totalTrays * EGGS_PER_TRAY;
     const stockOeufs = Math.max(0, totalEggs - totalBroken - totalSoldEggs);
 
     return NextResponse.json({
@@ -64,35 +60,30 @@ export async function GET(req: NextRequest) {
       totalBroken,
       totalSoldEggs,
       stockOeufs,
-      stockPlaquettes: Math.floor(stockOeufs / 30),
+      stockPlaquettes: Math.floor(stockOeufs / EGGS_PER_TRAY),
     });
   }
 
-  // Liste mouvements stock aliments
   const entries = await db.query.feedStock.findMany({
+    where: eq(feedStock.farmId, ctx.farmId),
     orderBy: [desc(feedStock.movementDate)],
   });
 
   return NextResponse.json({ entries });
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-  if (!canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Mode démo : lecture seule" }, { status: 403 });
-  }
+async function handlePost(req: NextRequest, ctx: AuthContext) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
 
   try {
     const body = await req.json();
     const data = feedStockSchema.parse(body);
-    const userId = parseInt(session.user.id);
 
     const inserted = await db
       .insert(feedStock)
       .values({
+        farmId: ctx.farmId,
         buildingId: data.buildingId,
         movementDate: data.movementDate,
         movementType: data.movementType,
@@ -101,16 +92,15 @@ export async function POST(req: NextRequest) {
         totalCost: data.totalCost?.toString(),
         feedType: data.feedType,
         notes: data.notes,
-        createdBy: isNaN(userId) ? null : userId,
+        createdBy: ctx.userId,
       })
       .returning();
 
     return NextResponse.json({ success: true, entry: inserted[0] });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Données invalides" }, { status: 400 });
-    }
-    console.error("Erreur stock:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return handleApiError(error, "stock");
   }
 }
+
+export const GET = withAuth(handleGet);
+export const POST = withAuth(handlePost);

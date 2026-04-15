@@ -17,6 +17,16 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { formatNumber, formatXOF, getCategoryLabel } from "@/lib/utils";
 
+/** Échappe les caractères HTML pour prévenir les injections XSS */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 type EntryType = "all" | "production" | "sale" | "expense";
 
 interface ReportEntry {
@@ -158,19 +168,19 @@ export default function RapportsPage() {
       .map(
         (entry) => `
           <tr>
-            <td>${entry.date}</td>
-            <td>${entryTypeLabel(entry.entryType)}</td>
-            <td>${entry.label}</td>
-            <td>${entry.details}</td>
+            <td>${escapeHtml(entry.date)}</td>
+            <td>${escapeHtml(entryTypeLabel(entry.entryType))}</td>
+            <td>${escapeHtml(entry.label)}</td>
+            <td>${escapeHtml(entry.details)}</td>
             <td>${
               entry.entryType === "production"
-                ? formatNumber(entry.eggsCollected ?? 0)
+                ? escapeHtml(formatNumber(entry.eggsCollected ?? 0))
                 : entry.entryType === "sale"
-                  ? formatNumber(entry.traysSold ?? 0)
+                  ? escapeHtml(formatNumber(entry.traysSold ?? 0))
                   : "-"
             }</td>
-            <td>${formatXOF(entry.amountXof)}</td>
-            <td>${entry.category}</td>
+            <td>${escapeHtml(formatXOF(entry.amountXof))}</td>
+            <td>${escapeHtml(entry.category)}</td>
           </tr>
         `
       )

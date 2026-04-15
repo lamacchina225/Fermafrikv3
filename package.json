@@ -16,6 +16,7 @@
     "db:migrate-v2": "tsx --env-file=.env.local src/db/migrate-from-v2.ts",
     "db:migrate-real": "tsx --env-file=.env.local src/db/migrate-real-data.ts",
     "db:preview": "tsx --env-file=.env.local src/db/preview-data.ts",
+    "db:migrate-tenant": "tsx --env-file=.env.local src/db/migrate-to-multitenant.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -42,7 +43,6 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
-    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.441.0",
     "next": "^15.3.0",
@@ -62,6 +62,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^2.4.6",
+    "drizzle-kit": "^0.31.10",
     "@types/node": "^20.16.1",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",

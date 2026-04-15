@@ -2,45 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { loginLimiter } from "@/lib/rate-limit";
 
-const loginSchema = z.object({
-  username: z.string().min(1, "Nom d'utilisateur requis"),
-  password: z.string().min(1, "Mot de passe requis"),
-});
-
-// Rate limiting : max 5 tentatives par IP sur 15 minutes
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000;
-
-/**
- * Vérifie si une IP est autorisée à tenter une connexion.
- * Bloque après MAX_ATTEMPTS tentatives échouées sur WINDOW_MS ms.
- * @returns true si autorisé, false si bloqué
- */
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_ATTEMPTS) return false;
-  entry.count++;
-  return true;
-}
-
-/**
- * Réinitialise le compteur de tentatives pour une IP (après login réussi).
- */
-function resetRateLimit(ip: string) {
-  loginAttempts.delete(ip);
-}
-
-/**
- * Recherche un utilisateur par son nom d'utilisateur en base de données.
- * @returns L'utilisateur ou null s'il n'existe pas
- */
 async function findUser(username: string) {
   const { db } = await import("@/db");
   const { users } = await import("@/db/schema");
@@ -65,12 +28,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           (req as Request & { headers?: Headers })?.headers?.get("x-real-ip") ??
           "unknown";
 
-        if (!checkRateLimit(ip)) {
+        if (!loginLimiter.check(ip)) {
           console.warn(`Rate limit dépassé pour IP: ${ip}`);
           return null;
         }
 
-        const parsed = loginSchema.safeParse(credentials);
+        const parsed = z
+          .object({
+            username: z.string().min(1),
+            password: z.string().min(1),
+          })
+          .safeParse(credentials);
         if (!parsed.success) return null;
 
         const { username, password } = parsed.data;
@@ -80,13 +48,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const passwordMatch = await bcrypt.compare(password, user.passwordHash);
         if (!passwordMatch) return null;
 
-        resetRateLimit(ip);
+        loginLimiter.reset(ip);
 
         return {
           id: user.id.toString(),
           name: user.username,
           email: null,
           role: user.role,
+          farmId: user.farmId?.toString() ?? null,
         };
       },
     }),
@@ -96,6 +65,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.role = (user as { role?: string }).role;
         token.id = user.id;
+        token.farmId = (user as { farmId?: string | null }).farmId ?? null;
       }
       return token;
     },
@@ -103,6 +73,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (token) {
         session.user.role = token.role as string;
         session.user.id = token.id as string;
+        session.user.farmId = (token.farmId as string) ?? null;
       }
       return session;
     },
@@ -125,6 +96,7 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role: string;
+      farmId: string | null;
     };
   }
 }

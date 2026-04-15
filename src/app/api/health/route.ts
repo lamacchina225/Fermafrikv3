@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { healthRecords } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite } from "@/lib/utils";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
+import { handleApiError } from "@/lib/api-error";
 
 const healthSchema = z.object({
   buildingId: z.number(),
@@ -17,36 +17,43 @@ const healthSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+async function handleGet(req: NextRequest, ctx: AuthContext) {
+  const { searchParams } = new URL(req.url);
+  const limitParam = searchParams.get("limit");
+  const offsetParam = searchParams.get("offset");
+  const limit = Math.min(Math.max(parseInt(limitParam ?? "100", 10) || 100, 1), 500);
+  const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
 
-  const records = await db.query.healthRecords.findMany({
-    orderBy: [desc(healthRecords.recordDate)],
+  const farmFilter = eq(healthRecords.farmId, ctx.farmId);
+
+  const [records, totalCount] = await Promise.all([
+    db.query.healthRecords.findMany({
+      where: farmFilter,
+      orderBy: [desc(healthRecords.recordDate)],
+      limit,
+      offset,
+    }),
+    db.select({ count: sql<number>`COUNT(*)` }).from(healthRecords).where(farmFilter),
+  ]);
+
+  return NextResponse.json({
+    records,
+    pagination: { limit, offset, total: Number(totalCount[0]?.count ?? 0) },
   });
-
-  return NextResponse.json({ records });
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-  if (!canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Mode démo : lecture seule" }, { status: 403 });
-  }
+async function handlePost(req: NextRequest, ctx: AuthContext) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
 
   try {
     const body = await req.json();
     const data = healthSchema.parse(body);
-    const userId = parseInt(session.user.id);
 
     const inserted = await db
       .insert(healthRecords)
       .values({
+        farmId: ctx.farmId,
         cycleId: data.cycleId,
         buildingId: data.buildingId,
         recordDate: data.recordDate,
@@ -55,16 +62,15 @@ export async function POST(req: NextRequest) {
         dose: data.dose,
         cost: data.cost?.toString(),
         notes: data.notes,
-        createdBy: isNaN(userId) ? null : userId,
+        createdBy: ctx.userId,
       })
       .returning();
 
     return NextResponse.json({ success: true, record: inserted[0] });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Données invalides" }, { status: 400 });
-    }
-    console.error("Erreur santé:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return handleApiError(error, "santé");
   }
 }
+
+export const GET = withAuth(handleGet);
+export const POST = withAuth(handlePost);

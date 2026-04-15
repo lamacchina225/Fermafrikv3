@@ -1,37 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { dailyRecords, expenses } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { canWrite } from "@/lib/utils";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
 
-export async function DELETE(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user || !canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
-  }
+async function handleDelete(_req: NextRequest, ctx: AuthContext, params?: Record<string, string>) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
 
-  const { id: rawId } = await context.params;
-  const id = parseInt(rawId);
+  const id = parseInt(params?.id ?? "");
   if (isNaN(id)) {
     return NextResponse.json({ error: "ID invalide" }, { status: 400 });
   }
 
-  // Fetch the record first to get date/cycle/building for expense cascade
   const record = await db.query.dailyRecords.findFirst({
-    where: eq(dailyRecords.id, id),
+    where: and(eq(dailyRecords.id, id), eq(dailyRecords.farmId, ctx.farmId)),
   });
 
   if (!record) {
     return NextResponse.json({ error: "Saisie introuvable" }, { status: 404 });
   }
 
-  // Delete linked expenses for the same date/cycle/building
+  // Supprimer les dépenses liées
   await db.delete(expenses).where(
     and(
+      eq(expenses.farmId, ctx.farmId),
       eq(expenses.cycleId, record.cycleId),
       eq(expenses.buildingId, record.buildingId),
       eq(expenses.expenseDate, record.recordDate)
@@ -42,3 +35,5 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+
+export const DELETE = withAuth(handleDelete);

@@ -1,6 +1,7 @@
 import { format, subDays } from "date-fns";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { DollarSign, Egg, Package, TrendingUp, Users } from "lucide-react";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/layout/Header";
 import { CycleTimeline } from "@/components/timeline/CycleTimeline";
@@ -14,17 +15,18 @@ import {
   eggsToTrays,
   formatNumber,
   formatXOF,
+  EGGS_PER_TRAY,
 } from "@/lib/utils";
 
-async function getDashboardData() {
+async function getDashboardData(farmId: number) {
   const building = await db.query.buildings.findFirst({
-    where: eq(buildings.status, "active"),
+    where: and(eq(buildings.farmId, farmId), eq(buildings.status, "active")),
   });
 
   if (!building) return null;
 
   const cycle = await db.query.cycles.findFirst({
-    where: eq(cycles.buildingId, building.id),
+    where: and(eq(cycles.farmId, farmId), eq(cycles.buildingId, building.id)),
     orderBy: desc(cycles.id),
   });
 
@@ -32,37 +34,42 @@ async function getDashboardData() {
 
   const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
 
-  const yesterdayRecord = await db.query.dailyRecords.findFirst({
-    where: and(
-      eq(dailyRecords.cycleId, cycle.id),
-      eq(dailyRecords.recordDate, yesterday)
-    ),
-  });
+  const cycleFilter = and(eq(dailyRecords.farmId, farmId), eq(dailyRecords.cycleId, cycle.id));
+  const salesFilter = and(eq(sales.farmId, farmId), eq(sales.cycleId, cycle.id));
 
-  const cycleAggregates = await db
-    .select({
-      totalEggs: sql<number>`COALESCE(SUM(${dailyRecords.eggsCollected}), 0)`,
-      totalBroken: sql<number>`COALESCE(SUM(${dailyRecords.eggsBroken}), 0)`,
-      totalMortality: sql<number>`COALESCE(SUM(${dailyRecords.mortalityCount}), 0)`,
-      totalFeedCost: sql<number>`COALESCE(SUM(CAST(${dailyRecords.feedCost} AS NUMERIC)), 0)`,
-    })
-    .from(dailyRecords)
-    .where(eq(dailyRecords.cycleId, cycle.id));
-
-  const salesAggregates = await db
-    .select({
-      totalTrays: sql<number>`COALESCE(SUM(${sales.traysSold}), 0)`,
-      totalRevenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS NUMERIC)), 0)`,
-    })
-    .from(sales)
-    .where(eq(sales.cycleId, cycle.id));
-
-  const expensesTotal = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS NUMERIC)), 0)`,
-    })
-    .from(expenses)
-    .where(eq(expenses.cycleId, cycle.id));
+  // Requêtes parallèles — ~3x plus rapide que séquentiel
+  const [yesterdayRecord, cycleAggregates, salesAggregates, expensesTotal] =
+    await Promise.all([
+      db.query.dailyRecords.findFirst({
+        where: and(
+          eq(dailyRecords.farmId, farmId),
+          eq(dailyRecords.cycleId, cycle.id),
+          eq(dailyRecords.recordDate, yesterday)
+        ),
+      }),
+      db
+        .select({
+          totalEggs: sql<number>`COALESCE(SUM(${dailyRecords.eggsCollected}), 0)`,
+          totalBroken: sql<number>`COALESCE(SUM(${dailyRecords.eggsBroken}), 0)`,
+          totalMortality: sql<number>`COALESCE(SUM(${dailyRecords.mortalityCount}), 0)`,
+          totalFeedCost: sql<number>`COALESCE(SUM(CAST(${dailyRecords.feedCost} AS NUMERIC)), 0)`,
+        })
+        .from(dailyRecords)
+        .where(cycleFilter),
+      db
+        .select({
+          totalTrays: sql<number>`COALESCE(SUM(${sales.traysSold}), 0)`,
+          totalRevenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS NUMERIC)), 0)`,
+        })
+        .from(sales)
+        .where(salesFilter),
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS NUMERIC)), 0)`,
+        })
+        .from(expenses)
+        .where(and(eq(expenses.farmId, farmId), eq(expenses.cycleId, cycle.id))),
+    ]);
 
   const agg = cycleAggregates[0] ?? {
     totalEggs: 0,
@@ -83,7 +90,7 @@ async function getDashboardData() {
   const totalSoldTrays = Number(salesAgg.totalTrays);
   const stockOeufs = Math.max(
     0,
-    totalEggsCycle - totalBrokenCycle - totalSoldTrays * 30
+    totalEggsCycle - totalBrokenCycle - totalSoldTrays * EGGS_PER_TRAY
   );
   const stockPlaquettes = eggsToTrays(stockOeufs);
 
@@ -116,7 +123,30 @@ async function getDashboardData() {
 
 export default async function DashboardPage() {
   const session = await auth();
-  const data = await getDashboardData();
+  if (!session?.user) redirect("/login");
+
+  const farmId = session.user.farmId ? parseInt(session.user.farmId, 10) : NaN;
+  if (isNaN(farmId)) {
+    return (
+      <div>
+        <Header
+          title="Tableau de bord"
+          username={session?.user?.name ?? undefined}
+          userRole={session?.user?.role}
+        />
+        <div className="p-6">
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 text-center">
+            <p className="text-orange-700 font-medium">Aucune ferme associee a votre compte.</p>
+            <p className="text-orange-600 text-sm mt-1">
+              Contactez l&apos;administrateur pour configurer votre acces.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const data = await getDashboardData(farmId);
 
   if (!data || !data.cycle) {
     return (

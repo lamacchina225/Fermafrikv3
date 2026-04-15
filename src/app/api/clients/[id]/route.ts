@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { canWrite } from "@/lib/utils";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -12,38 +11,43 @@ const updateSchema = z.object({
   phone: z.string().max(20).optional().nullable(),
 });
 
-export async function PATCH(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user || !canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
-  }
-  const { id: rawId } = await context.params;
-  const id = parseInt(rawId);
+async function handlePatch(req: NextRequest, ctx: AuthContext, params?: Record<string, string>) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
+
+  const id = parseInt(params?.id ?? "");
   if (isNaN(id)) return NextResponse.json({ error: "ID invalide" }, { status: 400 });
 
   const body = await req.json();
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
+  // Vérifier ownership
+  const existing = await db.query.clients.findFirst({
+    where: and(eq(clients.id, id), eq(clients.farmId, ctx.farmId)),
+  });
+  if (!existing) return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
+
   await db.update(clients).set(parsed.data).where(eq(clients.id, id));
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user || !canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
-  }
-  const { id: rawId } = await context.params;
-  const id = parseInt(rawId);
+async function handleDelete(_req: NextRequest, ctx: AuthContext, params?: Record<string, string>) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
+
+  const id = parseInt(params?.id ?? "");
   if (isNaN(id)) return NextResponse.json({ error: "ID invalide" }, { status: 400 });
+
+  // Vérifier ownership
+  const existing = await db.query.clients.findFirst({
+    where: and(eq(clients.id, id), eq(clients.farmId, ctx.farmId)),
+  });
+  if (!existing) return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
 
   await db.delete(clients).where(eq(clients.id, id));
   return NextResponse.json({ success: true });
 }
+
+export const PATCH = withAuth(handlePatch);
+export const DELETE = withAuth(handleDelete);

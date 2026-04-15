@@ -9,6 +9,7 @@ import {
   timestamp,
   pgEnum,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -42,30 +43,61 @@ export const healthTypeEnum = pgEnum("health_type", [
   "vaccination",
   "medication",
 ]);
+export const subscriptionPlanEnum = pgEnum("subscription_plan", [
+  "free",
+  "premium",
+]);
 
-// Table users
-export const users = pgTable("users", {
+// ─── Table farms (NOUVEAU — multi-tenant) ─────────────────────────────────
+export const farms = pgTable("farms", {
   id: serial("id").primaryKey(),
-  username: varchar("username", { length: 50 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  role: roleEnum("role").notNull().default("gestionnaire"),
+  name: varchar("name", { length: 200 }).notNull(),
+  ownerId: integer("owner_id"),
+  subscriptionPlan: subscriptionPlanEnum("subscription_plan")
+    .notNull()
+    .default("free"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Table buildings (bâtiments)
-export const buildings = pgTable("buildings", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  capacity: integer("capacity").notNull(),
-  status: buildingStatusEnum("status").notNull().default("active"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+// ─── Table users ───────────────────────────────────────────────────────────
+export const users = pgTable(
+  "users",
+  {
+    id: serial("id").primaryKey(),
+    username: varchar("username", { length: 50 }).notNull().unique(),
+    email: varchar("email", { length: 255 }),
+    passwordHash: text("password_hash").notNull(),
+    role: roleEnum("role").notNull().default("gestionnaire"),
+    farmId: integer("farm_id").references(() => farms.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("users_farm_id_idx").on(t.farmId)]
+);
 
-// Table cycles
+// ─── Table buildings (bâtiments) ───────────────────────────────────────────
+export const buildings = pgTable(
+  "buildings",
+  {
+    id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
+    name: varchar("name", { length: 100 }).notNull(),
+    capacity: integer("capacity").notNull(),
+    status: buildingStatusEnum("status").notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("buildings_farm_id_idx").on(t.farmId)]
+);
+
+// ─── Table cycles ──────────────────────────────────────────────────────────
 export const cycles = pgTable(
   "cycles",
   {
     id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
     buildingId: integer("building_id")
       .notNull()
       .references(() => buildings.id),
@@ -75,14 +107,20 @@ export const cycles = pgTable(
     initialCount: integer("initial_count").notNull(),
     notes: text("notes"),
   },
-  (t) => [index("cycles_building_id_idx").on(t.buildingId)]
+  (t) => [
+    index("cycles_building_id_idx").on(t.buildingId),
+    index("cycles_farm_id_idx").on(t.farmId),
+  ]
 );
 
-// Table daily_records (saisies journalières)
+// ─── Table daily_records (saisies journalières) ────────────────────────────
 export const dailyRecords = pgTable(
   "daily_records",
   {
     id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
     cycleId: integer("cycle_id")
       .notNull()
       .references(() => cycles.id),
@@ -114,14 +152,23 @@ export const dailyRecords = pgTable(
     index("daily_records_cycle_id_idx").on(t.cycleId),
     index("daily_records_building_id_idx").on(t.buildingId),
     index("daily_records_record_date_idx").on(t.recordDate),
+    index("daily_records_farm_id_idx").on(t.farmId),
+    uniqueIndex("daily_records_farm_building_date_idx").on(
+      t.farmId,
+      t.buildingId,
+      t.recordDate
+    ),
   ]
 );
 
-// Table expenses (dépenses)
+// ─── Table expenses (dépenses) ─────────────────────────────────────────────
 export const expenses = pgTable(
   "expenses",
   {
     id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
     cycleId: integer("cycle_id")
       .notNull()
       .references(() => cycles.id),
@@ -138,14 +185,18 @@ export const expenses = pgTable(
   (t) => [
     index("expenses_cycle_id_idx").on(t.cycleId),
     index("expenses_expense_date_idx").on(t.expenseDate),
+    index("expenses_farm_id_idx").on(t.farmId),
   ]
 );
 
-// Table sales (ventes)
+// ─── Table sales (ventes) ──────────────────────────────────────────────────
 export const sales = pgTable(
   "sales",
   {
     id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
     cycleId: integer("cycle_id")
       .notNull()
       .references(() => cycles.id),
@@ -164,14 +215,18 @@ export const sales = pgTable(
   (t) => [
     index("sales_cycle_id_idx").on(t.cycleId),
     index("sales_sale_date_idx").on(t.saleDate),
+    index("sales_farm_id_idx").on(t.farmId),
   ]
 );
 
-// Table health_records (santé)
+// ─── Table health_records (santé) ──────────────────────────────────────────
 export const healthRecords = pgTable(
   "health_records",
   {
     id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
     cycleId: integer("cycle_id")
       .notNull()
       .references(() => cycles.id),
@@ -187,45 +242,93 @@ export const healthRecords = pgTable(
     createdBy: integer("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("health_records_cycle_id_idx").on(t.cycleId)]
+  (t) => [
+    index("health_records_cycle_id_idx").on(t.cycleId),
+    index("health_records_farm_id_idx").on(t.farmId),
+  ]
 );
 
-// Table feed_stock (stock aliments)
-export const feedStock = pgTable("feed_stock", {
-  id: serial("id").primaryKey(),
-  buildingId: integer("building_id")
-    .notNull()
-    .references(() => buildings.id),
-  movementDate: date("movement_date").notNull(),
-  movementType: feedMovementTypeEnum("movement_type").notNull(),
-  quantityKg: decimal("quantity_kg", { precision: 8, scale: 2 }).notNull(),
-  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
-  totalCost: decimal("total_cost", { precision: 12, scale: 2 }),
-  feedType: feedTypeEnum("feed_type").notNull(),
-  notes: text("notes"),
-  createdBy: integer("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+// ─── Table feed_stock (stock aliments) ─────────────────────────────────────
+export const feedStock = pgTable(
+  "feed_stock",
+  {
+    id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
+    buildingId: integer("building_id")
+      .notNull()
+      .references(() => buildings.id),
+    movementDate: date("movement_date").notNull(),
+    movementType: feedMovementTypeEnum("movement_type").notNull(),
+    quantityKg: decimal("quantity_kg", { precision: 8, scale: 2 }).notNull(),
+    unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
+    totalCost: decimal("total_cost", { precision: 12, scale: 2 }),
+    feedType: feedTypeEnum("feed_type").notNull(),
+    notes: text("notes"),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("feed_stock_farm_id_idx").on(t.farmId)]
+);
 
-// Table clients (acheteurs)
-export const clients = pgTable("clients", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 200 }).notNull(),
-  city: varchar("city", { length: 100 }),
-  phone: varchar("phone", { length: 20 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+// ─── Table clients (acheteurs) ─────────────────────────────────────────────
+export const clients = pgTable(
+  "clients",
+  {
+    id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
+    name: varchar("name", { length: 200 }).notNull(),
+    city: varchar("city", { length: 100 }),
+    phone: varchar("phone", { length: 20 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("clients_farm_id_idx").on(t.farmId)]
+);
 
-// Table settings (paramètres)
-export const settings = pgTable("settings", {
-  key: varchar("key", { length: 100 }).primaryKey(),
-  value: text("value").notNull(),
-  updatedBy: integer("updated_by").references(() => users.id),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+// ─── Table settings (paramètres par ferme) ─────────────────────────────────
+export const settings = pgTable(
+  "settings",
+  {
+    id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farms.id),
+    key: varchar("key", { length: 100 }).notNull(),
+    value: text("value").notNull(),
+    updatedBy: integer("updated_by").references(() => users.id),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("settings_farm_key_idx").on(t.farmId, t.key),
+  ]
+);
 
+// ═══════════════════════════════════════════════════════════════════════════
 // Relations
-export const buildingsRelations = relations(buildings, ({ many }) => ({
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const farmsRelations = relations(farms, ({ many }) => ({
+  users: many(users),
+  buildings: many(buildings),
+  cycles: many(cycles),
+  clients: many(clients),
+}));
+
+export const usersRelations = relations(users, ({ one }) => ({
+  farm: one(farms, {
+    fields: [users.farmId],
+    references: [farms.id],
+  }),
+}));
+
+export const buildingsRelations = relations(buildings, ({ one, many }) => ({
+  farm: one(farms, {
+    fields: [buildings.farmId],
+    references: [farms.id],
+  }),
   cycles: many(cycles),
   dailyRecords: many(dailyRecords),
   expenses: many(expenses),
@@ -235,6 +338,10 @@ export const buildingsRelations = relations(buildings, ({ many }) => ({
 }));
 
 export const cyclesRelations = relations(cycles, ({ one, many }) => ({
+  farm: one(farms, {
+    fields: [cycles.farmId],
+    references: [farms.id],
+  }),
   building: one(buildings, {
     fields: [cycles.buildingId],
     references: [buildings.id],
@@ -246,6 +353,10 @@ export const cyclesRelations = relations(cycles, ({ one, many }) => ({
 }));
 
 export const dailyRecordsRelations = relations(dailyRecords, ({ one }) => ({
+  farm: one(farms, {
+    fields: [dailyRecords.farmId],
+    references: [farms.id],
+  }),
   cycle: one(cycles, {
     fields: [dailyRecords.cycleId],
     references: [cycles.id],
@@ -261,6 +372,10 @@ export const dailyRecordsRelations = relations(dailyRecords, ({ one }) => ({
 }));
 
 export const expensesRelations = relations(expenses, ({ one }) => ({
+  farm: one(farms, {
+    fields: [expenses.farmId],
+    references: [farms.id],
+  }),
   cycle: one(cycles, {
     fields: [expenses.cycleId],
     references: [cycles.id],
@@ -275,11 +390,19 @@ export const expensesRelations = relations(expenses, ({ one }) => ({
   }),
 }));
 
-export const clientsRelations = relations(clients, ({ many }) => ({
+export const clientsRelations = relations(clients, ({ one, many }) => ({
+  farm: one(farms, {
+    fields: [clients.farmId],
+    references: [farms.id],
+  }),
   sales: many(sales),
 }));
 
 export const salesRelations = relations(sales, ({ one }) => ({
+  farm: one(farms, {
+    fields: [sales.farmId],
+    references: [farms.id],
+  }),
   cycle: one(cycles, {
     fields: [sales.cycleId],
     references: [cycles.id],
@@ -299,6 +422,10 @@ export const salesRelations = relations(sales, ({ one }) => ({
 }));
 
 export const healthRecordsRelations = relations(healthRecords, ({ one }) => ({
+  farm: one(farms, {
+    fields: [healthRecords.farmId],
+    references: [farms.id],
+  }),
   cycle: one(cycles, {
     fields: [healthRecords.cycleId],
     references: [cycles.id],
@@ -314,6 +441,10 @@ export const healthRecordsRelations = relations(healthRecords, ({ one }) => ({
 }));
 
 export const feedStockRelations = relations(feedStock, ({ one }) => ({
+  farm: one(farms, {
+    fields: [feedStock.farmId],
+    references: [farms.id],
+  }),
   building: one(buildings, {
     fields: [feedStock.buildingId],
     references: [buildings.id],

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { expenses } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite } from "@/lib/utils";
+import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
+import { handleApiError } from "@/lib/api-error";
 
 const expenseSchema = z.object({
   buildingId: z.number(),
@@ -15,56 +15,47 @@ const expenseSchema = z.object({
   category: z.enum(["alimentation", "sante", "energie", "main_oeuvre", "equipement", "autre"]),
 });
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
+async function handleGet(req: NextRequest, ctx: AuthContext) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
 
+  const farmFilter = eq(expenses.farmId, ctx.farmId);
+
   const allExpenses = await db.query.expenses.findMany({
-    where: date ? eq(expenses.expenseDate, date) : undefined,
+    where: date ? and(farmFilter, eq(expenses.expenseDate, date)) : farmFilter,
     orderBy: [desc(expenses.expenseDate), desc(expenses.createdAt)],
   });
 
   return NextResponse.json({ expenses: allExpenses });
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-  if (!canWrite(session.user.role)) {
-    return NextResponse.json({ error: "Mode démo : lecture seule" }, { status: 403 });
-  }
+async function handlePost(req: NextRequest, ctx: AuthContext) {
+  const writeError = requireWrite(ctx);
+  if (writeError) return writeError;
 
   try {
     const body = await req.json();
     const data = expenseSchema.parse(body);
-    const userId = parseInt(session.user.id);
 
     const inserted = await db
       .insert(expenses)
       .values({
+        farmId: ctx.farmId,
         cycleId: data.cycleId,
         buildingId: data.buildingId,
         expenseDate: data.expenseDate,
         label: data.label,
         amount: data.amount.toString(),
         category: data.category,
-        createdBy: isNaN(userId) ? null : userId,
+        createdBy: ctx.userId,
       })
       .returning();
 
     return NextResponse.json({ success: true, expense: inserted[0] });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Données invalides" }, { status: 400 });
-    }
-    console.error("Erreur dépense:", error);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return handleApiError(error, "dépense");
   }
 }
+
+export const GET = withAuth(handleGet);
+export const POST = withAuth(handlePost);

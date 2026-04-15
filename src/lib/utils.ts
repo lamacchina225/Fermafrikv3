@@ -2,6 +2,10 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistance, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
+import { EGGS_PER_TRAY } from "@/lib/constants";
+
+// ── Réexport des constantes métier ──────────────────────────────────────────
+export { EGGS_PER_TRAY } from "@/lib/constants";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -67,7 +71,7 @@ export function calculateStockOeufs(
   totalCollected: number,
   totalSoldTrays: number,
   totalBroken: number,
-  eggsPerTray: number = 30
+  eggsPerTray: number = EGGS_PER_TRAY
 ): number {
   const totalSoldEggs = totalSoldTrays * eggsPerTray;
   return Math.max(0, totalCollected - totalSoldEggs - totalBroken);
@@ -76,14 +80,14 @@ export function calculateStockOeufs(
 /**
  * Convertit des oeufs en plaquettes
  */
-export function eggsToTrays(eggs: number, eggsPerTray: number = 30): number {
+export function eggsToTrays(eggs: number, eggsPerTray: number = EGGS_PER_TRAY): number {
   return Math.floor(eggs / eggsPerTray);
 }
 
 /**
  * Convertit des plaquettes en oeufs
  */
-export function traysToEggs(trays: number, eggsPerTray: number = 30): number {
+export function traysToEggs(trays: number, eggsPerTray: number = EGGS_PER_TRAY): number {
   return trays * eggsPerTray;
 }
 
