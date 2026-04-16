@@ -68,7 +68,7 @@ export const users = pgTable(
     email: varchar("email", { length: 255 }),
     passwordHash: text("password_hash").notNull(),
     role: roleEnum("role").notNull().default("gestionnaire"),
-    farmId: integer("farm_id").references(() => farms.id),
+    farmId: integer("farm_id").references(() => farms.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("users_farm_id_idx").on(t.farmId)]
@@ -81,7 +81,7 @@ export const buildings = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 100 }).notNull(),
     capacity: integer("capacity").notNull(),
     status: buildingStatusEnum("status").notNull().default("active"),
@@ -97,10 +97,10 @@ export const cycles = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     startDate: date("start_date").notNull(),
     endDate: date("end_date"),
     phase: phaseEnum("phase").notNull().default("demarrage"),
@@ -120,13 +120,13 @@ export const dailyRecords = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     cycleId: integer("cycle_id")
       .notNull()
-      .references(() => cycles.id),
+      .references(() => cycles.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     recordDate: date("record_date").notNull(),
     eggsCollected: integer("eggs_collected").notNull().default(0),
     eggsBroken: integer("eggs_broken").notNull().default(0),
@@ -144,7 +144,7 @@ export const dailyRecords = pgTable(
     }).default("0"),
     feedType: feedTypeEnum("feed_type"),
     feedCost: decimal("feed_cost", { precision: 10, scale: 2 }).default("0"),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -168,18 +168,18 @@ export const expenses = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     cycleId: integer("cycle_id")
       .notNull()
-      .references(() => cycles.id),
+      .references(() => cycles.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     expenseDate: date("expense_date").notNull(),
     label: varchar("label", { length: 200 }).notNull(),
     amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
     category: expenseCategoryEnum("category").notNull().default("autre"),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
@@ -196,20 +196,20 @@ export const sales = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     cycleId: integer("cycle_id")
       .notNull()
-      .references(() => cycles.id),
+      .references(() => cycles.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     saleDate: date("sale_date").notNull(),
     traysSold: integer("trays_sold").notNull(),
     unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
-    clientId: integer("client_id").references(() => clients.id),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
     buyerName: varchar("buyer_name", { length: 200 }),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
@@ -226,20 +226,20 @@ export const healthRecords = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     cycleId: integer("cycle_id")
       .notNull()
-      .references(() => cycles.id),
+      .references(() => cycles.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     recordDate: date("record_date").notNull(),
     type: healthTypeEnum("type").notNull(),
     productName: varchar("product_name", { length: 200 }).notNull(),
     dose: varchar("dose", { length: 100 }),
     cost: decimal("cost", { precision: 10, scale: 2 }).default("0"),
     notes: text("notes"),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
@@ -255,10 +255,10 @@ export const feedStock = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     buildingId: integer("building_id")
       .notNull()
-      .references(() => buildings.id),
+      .references(() => buildings.id, { onDelete: "restrict" }),
     movementDate: date("movement_date").notNull(),
     movementType: feedMovementTypeEnum("movement_type").notNull(),
     quantityKg: decimal("quantity_kg", { precision: 8, scale: 2 }).notNull(),
@@ -266,7 +266,7 @@ export const feedStock = pgTable(
     totalCost: decimal("total_cost", { precision: 12, scale: 2 }),
     feedType: feedTypeEnum("feed_type").notNull(),
     notes: text("notes"),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("feed_stock_farm_id_idx").on(t.farmId)]
@@ -279,7 +279,7 @@ export const clients = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 200 }).notNull(),
     city: varchar("city", { length: 100 }),
     phone: varchar("phone", { length: 20 }),
@@ -295,10 +295,10 @@ export const settings = pgTable(
     id: serial("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
-      .references(() => farms.id),
+      .references(() => farms.id, { onDelete: "cascade" }),
     key: varchar("key", { length: 100 }).notNull(),
     value: text("value").notNull(),
-    updatedBy: integer("updated_by").references(() => users.id),
+    updatedBy: integer("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [

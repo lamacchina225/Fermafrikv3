@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, dev_ionos, prod_IONOS]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, dev_ionos, prod_IONOS]
 
 jobs:
   lint-typecheck-test:

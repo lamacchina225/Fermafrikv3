@@ -61,12 +61,22 @@ npm run dev          # Serveur de développement
 npm run build        # Build production
 npm run test         # Tests Vitest
 npm run test:watch   # Tests en mode watch
+npm run test:e2e     # Tests E2E Playwright (a11y inclus)
 npm run lint         # ESLint
 npm run db:push      # Push le schéma vers la DB
 npm run db:studio    # Interface Drizzle Studio
 ```
 
-## Variables d'environnement requises
+## Variables d'environnement
 
+**Requises :**
 - `DATABASE_URL` : URL de connexion PostgreSQL (Neon)
-- `AUTH_SECRET` : Secret pour NextAuth JWT
+- `AUTH_SECRET` : Secret pour NextAuth JWT (32+ caractères)
+
+**Optionnelles :**
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` : Bascule le rate limiter sur Redis (requis en multi-instance)
+- `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` : Active la capture d'erreurs Sentry
+
+## Migrations DB manuelles
+
+Le projet utilise `db:push` pour le dev. Les changements de FK/contraintes sensibles en prod sont placés dans `drizzle/manual/` et doivent être appliqués via `psql` sur la base cible.

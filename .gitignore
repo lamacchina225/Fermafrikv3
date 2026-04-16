@@ -24,6 +24,7 @@ yarn-debug.log*
 yarn-error.log*
 .next-dev.out.log
 .next-dev.err.log
+.next-dev.log
 
 # Local env files
 .env
@@ -39,5 +40,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Drizzle
-drizzle/
+# Drizzle (auto-generated) — manual SQL migrations must be tracked
+drizzle/*
+!drizzle/manual/
+!drizzle/manual/**
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/.playwright-mcp/

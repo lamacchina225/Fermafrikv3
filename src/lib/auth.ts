@@ -30,7 +30,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           (req as Request & { headers?: Headers })?.headers?.get("x-real-ip") ??
           "unknown";
 
-        if (!loginLimiter.check(ip)) {
+        if (!(await loginLimiter.check(ip))) {
           console.warn(`Rate limit dépassé pour IP: ${ip}`);
           return null;
         }
@@ -50,7 +50,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const passwordMatch = await bcrypt.compare(password, user.passwordHash);
         if (!passwordMatch) return null;
 
-        loginLimiter.reset(ip);
+        await loginLimiter.reset(ip);
 
         return {
           id: user.id.toString(),

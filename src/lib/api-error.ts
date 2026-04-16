@@ -4,6 +4,7 @@ import {
   API_ERROR_GENERIC,
   API_ERROR_INVALID_DATA,
 } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 
 /**
  * Types d'erreurs API standardisés
@@ -50,7 +51,7 @@ export function handleApiError(
     );
   }
 
-  console.error(`[API] Erreur ${context}:`, error);
+  logger.error(`API error`, error, { context });
 
   return NextResponse.json(
     { error: API_ERROR_GENERIC, context },

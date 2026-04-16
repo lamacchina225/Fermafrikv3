@@ -22,9 +22,9 @@ const validData = {
 };
 
 describe("POST /api/register", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    registerLimiter.reset("unknown");
+    await registerLimiter.reset("unknown");
   });
 
   it("retourne 400 si username < 3 caractères", async () => {

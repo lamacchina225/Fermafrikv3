@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ??
       "unknown";
 
-    if (!registerLimiter.check(ip)) {
+    if (!(await registerLimiter.check(ip))) {
       return NextResponse.json(
         { error: "Trop de tentatives. Réessayez dans 30 minutes." },
         { status: 429 }
