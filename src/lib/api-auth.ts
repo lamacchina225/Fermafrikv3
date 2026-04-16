@@ -27,7 +27,10 @@ type NextRouteHandler = (
  * Refuse l'accès si l'utilisateur n'a pas de ferme associée.
  */
 export function withAuth(handler: AuthHandler, requiredRole?: Role): NextRouteHandler {
-  return async (req, context) => {
+  const wrapped = async (
+    req: NextRequest,
+    context?: { params?: Promise<Record<string, string>> | Record<string, string> }
+  ) => {
     const session = await auth();
 
     if (!session?.user) {
@@ -50,10 +53,13 @@ export function withAuth(handler: AuthHandler, requiredRole?: Role): NextRouteHa
     }
 
     // Resolve params (Next.js 15 makes params a Promise)
-    const resolvedParams = context?.params ? await context.params : undefined;
+    const resolvedParams = context?.params
+      ? (context.params instanceof Promise ? await context.params : context.params)
+      : undefined;
 
     return handler(req, { session, userId, farmId }, resolvedParams);
   };
+  return wrapped as NextRouteHandler;
 }
 
 /**

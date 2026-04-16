@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makeRequest(body: object, method = "POST"): NextRequest {
   return new NextRequest("http://localhost/api/sales", {
@@ -33,7 +34,7 @@ describe("POST /api/sales", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await POST(makeRequest(validSale));
+    const res = await POST(makeRequest(validSale), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -41,7 +42,7 @@ describe("POST /api/sales", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "3", role: "demo", name: "demo", farmId: "1" },
     } as never);
-    const res = await POST(makeRequest(validSale));
+    const res = await POST(makeRequest(validSale), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -49,7 +50,7 @@ describe("POST /api/sales", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: null },
     } as never);
-    const res = await POST(makeRequest(validSale));
+    const res = await POST(makeRequest(validSale), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -57,7 +58,7 @@ describe("POST /api/sales", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makeRequest({ ...validSale, traysSold: 0 }));
+    const res = await POST(makeRequest({ ...validSale, traysSold: 0 }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -65,7 +66,7 @@ describe("POST /api/sales", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makeRequest({ ...validSale, saleDate: "2026-03-31T12:00:00Z" }));
+    const res = await POST(makeRequest({ ...validSale, saleDate: "2026-03-31T12:00:00Z" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -73,7 +74,7 @@ describe("POST /api/sales", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makeRequest({ ...validSale, buyerName: "A".repeat(201) }));
+    const res = await POST(makeRequest({ ...validSale, buyerName: "A".repeat(201) }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -87,7 +88,7 @@ describe("POST /api/sales", () => {
         returning: vi.fn().mockResolvedValueOnce([newSale]),
       }),
     });
-    const res = await POST(makeRequest(validSale));
+    const res = await POST(makeRequest(validSale), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.sale).toBeDefined();

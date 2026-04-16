@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makePostRequest(body: object): NextRequest {
   return new NextRequest("http://localhost/api/health", {
@@ -35,7 +36,7 @@ describe("GET /api/health", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -43,7 +44,7 @@ describe("GET /api/health", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: null },
     } as never);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -57,7 +58,7 @@ describe("GET /api/health", () => {
         where: vi.fn().mockResolvedValueOnce([{ count: 0 }]),
       }),
     });
-    const res = await GET(makeGetRequest("?limit=10&offset=5"));
+    const res = await GET(makeGetRequest("?limit=10&offset=5"), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pagination).toBeDefined();
@@ -71,7 +72,7 @@ describe("POST /api/health", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await POST(makePostRequest(validHealth));
+    const res = await POST(makePostRequest(validHealth), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -79,7 +80,7 @@ describe("POST /api/health", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "3", role: "demo", name: "demo", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest(validHealth));
+    const res = await POST(makePostRequest(validHealth), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -87,7 +88,7 @@ describe("POST /api/health", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest({ ...validHealth, type: "invalid" }));
+    const res = await POST(makePostRequest({ ...validHealth, type: "invalid" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -95,7 +96,7 @@ describe("POST /api/health", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest({ ...validHealth, productName: "" }));
+    const res = await POST(makePostRequest({ ...validHealth, productName: "" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -104,7 +105,8 @@ describe("POST /api/health", () => {
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
     const res = await POST(
-      makePostRequest({ ...validHealth, recordDate: "2026-04-10T00:00:00Z" })
+      makePostRequest({ ...validHealth, recordDate: "2026-04-10T00:00:00Z" }),
+      ctx
     );
     expect(res.status).toBe(400);
   });

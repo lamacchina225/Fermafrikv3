@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makePostRequest(body: object): NextRequest {
   return new NextRequest("http://localhost/api/cycles", {
@@ -40,7 +41,7 @@ describe("GET /api/cycles", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -48,7 +49,7 @@ describe("GET /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: null },
     } as never);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(403);
   });
 });
@@ -58,7 +59,7 @@ describe("POST /api/cycles", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await POST(makePostRequest(validCycle));
+    const res = await POST(makePostRequest(validCycle), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -66,7 +67,7 @@ describe("POST /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "2", role: "gestionnaire", name: "gest", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest(validCycle));
+    const res = await POST(makePostRequest(validCycle), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -74,7 +75,7 @@ describe("POST /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "3", role: "demo", name: "demo", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest(validCycle));
+    const res = await POST(makePostRequest(validCycle), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -82,7 +83,7 @@ describe("POST /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest({ ...validCycle, initialCount: 0 }));
+    const res = await POST(makePostRequest({ ...validCycle, initialCount: 0 }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -90,7 +91,7 @@ describe("POST /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
-    const res = await POST(makePostRequest({ ...validCycle, phase: "invalid" }));
+    const res = await POST(makePostRequest({ ...validCycle, phase: "invalid" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -99,7 +100,8 @@ describe("POST /api/cycles", () => {
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
     const res = await POST(
-      makePostRequest({ ...validCycle, startDate: "2026-01-15T00:00" })
+      makePostRequest({ ...validCycle, startDate: "2026-01-15T00:00" }),
+      ctx
     );
     expect(res.status).toBe(400);
   });
@@ -110,7 +112,7 @@ describe("PATCH /api/cycles", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await PATCH(makePatchRequest({ phase: "production" }, 1));
+    const res = await PATCH(makePatchRequest({ phase: "production" }, 1), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -118,7 +120,7 @@ describe("PATCH /api/cycles", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "2", role: "gestionnaire", name: "gest", farmId: "1" },
     } as never);
-    const res = await PATCH(makePatchRequest({ phase: "production" }, 1));
+    const res = await PATCH(makePatchRequest({ phase: "production" }, 1), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -127,7 +129,7 @@ describe("PATCH /api/cycles", () => {
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
     (mockDb.query.cycles.findFirst as Mock).mockResolvedValueOnce(null);
-    const res = await PATCH(makePatchRequest({ phase: "production" }, 999));
+    const res = await PATCH(makePatchRequest({ phase: "production" }, 999), ctx);
     expect(res.status).toBe(404);
   });
 });

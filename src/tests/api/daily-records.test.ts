@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makePostRequest(body: object): NextRequest {
   return new NextRequest("http://localhost/api/daily-records", {
@@ -29,25 +30,25 @@ describe("POST /api/daily-records", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await POST(makePostRequest(validPayload));
+    const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(401);
   });
 
   it("retourne 403 pour le rôle demo (lecture seule)", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "3", role: "demo", name: "demo", farmId: "1" } } as never);
-    const res = await POST(makePostRequest(validPayload));
+    const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(403);
   });
 
   it("retourne 400 si les données sont invalides (oeufs négatifs)", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    const res = await POST(makePostRequest({ ...validPayload, eggsCollected: -10 }));
+    const res = await POST(makePostRequest({ ...validPayload, eggsCollected: -10 }), ctx);
     expect(res.status).toBe(400);
   });
 
   it("retourne 400 si recordDate dépasse 10 chars", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    const res = await POST(makePostRequest({ ...validPayload, recordDate: "2026-03-31T00:00:00Z" }));
+    const res = await POST(makePostRequest({ ...validPayload, recordDate: "2026-03-31T00:00:00Z" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -59,7 +60,7 @@ describe("POST /api/daily-records", () => {
         returning: vi.fn().mockResolvedValueOnce([{ id: 42 }]),
       }),
     });
-    const res = await POST(makePostRequest(validPayload));
+    const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
@@ -74,7 +75,7 @@ describe("POST /api/daily-records", () => {
         where: vi.fn().mockResolvedValueOnce(undefined),
       }),
     });
-    const res = await POST(makePostRequest(validPayload));
+    const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.updated).toBe(true);

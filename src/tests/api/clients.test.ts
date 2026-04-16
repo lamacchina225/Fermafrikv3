@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makeRequest(method = "GET", body?: object): NextRequest {
   return new NextRequest("http://localhost/api/clients", {
@@ -20,7 +21,7 @@ describe("GET /api/clients", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest(), ctx);
     expect(res.status).toBe(401);
     const json = await res.json();
     expect(json.error).toBe("Non autorisé");
@@ -36,7 +37,7 @@ describe("GET /api/clients", () => {
         }),
       }),
     });
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest(), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.clients).toHaveLength(1);
@@ -49,13 +50,13 @@ describe("POST /api/clients", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await POST(makeRequest("POST", { name: "Test" }));
+    const res = await POST(makeRequest("POST", { name: "Test" }), ctx);
     expect(res.status).toBe(401);
   });
 
   it("retourne 400 si le nom est vide", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    const res = await POST(makeRequest("POST", { name: "" }));
+    const res = await POST(makeRequest("POST", { name: "" }), ctx);
     expect(res.status).toBe(400);
   });
 
@@ -67,7 +68,7 @@ describe("POST /api/clients", () => {
         returning: vi.fn().mockResolvedValueOnce([newClient]),
       }),
     });
-    const res = await POST(makeRequest("POST", { name: "Kouassi", city: "Yamoussoukro" }));
+    const res = await POST(makeRequest("POST", { name: "Kouassi", city: "Yamoussoukro" }), ctx);
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.client.name).toBe("Kouassi");

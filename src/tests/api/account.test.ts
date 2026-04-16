@@ -6,6 +6,7 @@ import { db } from "@/db";
 
 const mockAuth = auth as unknown as Mock;
 const mockDb = vi.mocked(db);
+const ctx = { params: Promise.resolve({}) };
 
 function makePostRequest(body: object): NextRequest {
   return new NextRequest("http://localhost/api/account", {
@@ -24,7 +25,7 @@ describe("GET /api/account", () => {
 
   it("retourne 401 si non authentifié", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(401);
   });
 
@@ -32,7 +33,7 @@ describe("GET /api/account", () => {
     mockAuth.mockResolvedValueOnce({
       user: { id: "1", role: "admin", name: "admin", farmId: null },
     } as never);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(403);
   });
 
@@ -41,7 +42,7 @@ describe("GET /api/account", () => {
       user: { id: "1", role: "admin", name: "admin", farmId: "1" },
     } as never);
     (mockDb.query.users.findFirst as Mock).mockResolvedValueOnce(null);
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(404);
   });
 
@@ -56,7 +57,7 @@ describe("GET /api/account", () => {
       role: "admin",
       createdAt: new Date(),
     });
-    const res = await GET(makeGetRequest());
+    const res = await GET(makeGetRequest(), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.username).toBe("admin");
@@ -76,7 +77,8 @@ describe("POST /api/account (changement de mot de passe)", () => {
         currentPassword: "old",
         newPassword: "NewPass1",
         confirmPassword: "NewPass1",
-      })
+      }),
+      ctx
     );
     expect(res.status).toBe(401);
   });
@@ -90,7 +92,8 @@ describe("POST /api/account (changement de mot de passe)", () => {
         currentPassword: "old",
         newPassword: "ab",
         confirmPassword: "ab",
-      })
+      }),
+      ctx
     );
     expect(res.status).toBe(400);
   });
@@ -104,7 +107,8 @@ describe("POST /api/account (changement de mot de passe)", () => {
         currentPassword: "old",
         newPassword: "NewPass1",
         confirmPassword: "Different1",
-      })
+      }),
+      ctx
     );
     expect(res.status).toBe(400);
   });
