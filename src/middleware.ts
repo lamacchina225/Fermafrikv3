@@ -11,6 +11,7 @@ export default auth((req) => {
     nextUrl.pathname === "/login" || nextUrl.pathname === "/register";
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isApiRegister = nextUrl.pathname === "/api/register";
+  const isApiIcon = nextUrl.pathname.startsWith("/api/icon");
   const isDemoPage = nextUrl.pathname === "/demo";
   const role = req.auth?.user?.role;
 
@@ -28,7 +29,7 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/api/auth") ||
     nextUrl.pathname.startsWith("/api/icon");
 
-  if (isApiAuthRoute || isApiRegister) {
+  if (isApiAuthRoute || isApiRegister || isApiIcon) {
     return NextResponse.next();
   }
 

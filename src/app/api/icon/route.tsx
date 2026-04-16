@@ -11,8 +11,13 @@ export async function GET(req: NextRequest) {
   );
   const maskable = req.nextUrl.searchParams.get("maskable") === "1";
 
-  const baseUrl = new URL(req.url).origin;
-  const logoUrl = `${baseUrl}/logo.png`;
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const host = forwardedHost ?? req.headers.get("host");
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const protocol =
+    forwardedProto ??
+    (host?.includes("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
+  const logoUrl = host ? `${protocol}://${host}/logo.png` : undefined;
 
   return new ImageResponse(
     <AppIcon size={size} logoUrl={logoUrl} maskable={maskable} />,

@@ -1,10 +1,6 @@
-const CACHE_NAME = "fermafrik-v3";
+const CACHE_NAME = "fermafrik-v4";
 const STATIC_ASSETS = [
-  "/",
   "/offline",
-  "/saisie",
-  "/ventes",
-  "/stocks",
   "/manifest.json",
   "/logo.png",
 ];
@@ -41,6 +37,7 @@ self.addEventListener("fetch", (event) => {
 
   if (requestUrl.origin !== self.location.origin) return;
   if (requestUrl.pathname.startsWith("/api/auth")) return;
+  if (requestUrl.pathname.startsWith("/_next/")) return;
 
   if (requestUrl.pathname.startsWith("/api/")) {
     event.respondWith(
@@ -71,35 +68,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (requestUrl.pathname.startsWith("/_next/")) {
-    event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-
-        return fetch(event.request).then((response) => {
-          if (!response.ok) return response;
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        });
-      })
-    );
-    return;
-  }
-
   if (event.request.destination === "document") {
     event.respondWith(
       fetch(event.request)
-        .then((response) => {
-          if (!response.ok) return response;
-
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
+        .then((response) => response)
         .catch(async () => {
-          const cached = await caches.match(event.request);
-          if (cached) return cached;
           return caches.match("/offline");
         })
     );

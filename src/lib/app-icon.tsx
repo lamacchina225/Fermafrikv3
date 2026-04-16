@@ -6,11 +6,17 @@ type AppIconProps = {
 };
 
 export function AppIcon({ size, logoUrl, maskable = false, showWordmark = false }: AppIconProps) {
-  const resolvedLogoUrl = logoUrl === undefined ? null : (logoUrl ?? "/logo.png");
+  const resolvedLogoUrl = logoUrl === null ? null : (logoUrl ?? "/logo.png");
   const radius = maskable ? size * 0.26 : size * 0.22;
   const padding = maskable ? size * 0.18 : size * 0.12;
   const logoScale = showWordmark ? 0.9 : 1.75;
-  const logoShift = showWordmark ? 0 : -size * 0.34;
+  const logoShift = showWordmark ? 0 : size * 0.52;
+  const logoSurfaceBackground = resolvedLogoUrl
+    ? "linear-gradient(180deg, #ffffff 0%, #f7f2e6 100%)"
+    : "rgba(255, 255, 255, 0.04)";
+  const logoSurfaceShadow = resolvedLogoUrl
+    ? "0 10px 22px rgba(7, 21, 14, 0.18), inset 0 0 0 1px rgba(22, 49, 33, 0.08)"
+    : "inset 0 0 0 1px rgba(255, 255, 255, 0.05)";
 
   return (
     <div
@@ -36,8 +42,8 @@ export function AppIcon({ size, logoUrl, maskable = false, showWordmark = false 
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "rgba(255, 255, 255, 0.04)",
-            boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.05)",
+          background: logoSurfaceBackground,
+            boxShadow: logoSurfaceShadow,
           }}
         >
           {resolvedLogoUrl ? (

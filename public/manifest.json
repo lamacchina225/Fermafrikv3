@@ -13,61 +13,61 @@
   "categories": ["productivity", "business"],
   "icons": [
     {
-      "src": "/api/icon?size=72",
+      "src": "/api/icon?size=72&v=20260416-3",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=96",
+      "src": "/api/icon?size=96&v=20260416-3",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=128",
+      "src": "/api/icon?size=128&v=20260416-3",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=144",
+      "src": "/api/icon?size=144&v=20260416-3",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=152",
+      "src": "/api/icon?size=152&v=20260416-3",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=192",
+      "src": "/api/icon?size=192&v=20260416-3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=192&maskable=1",
+      "src": "/api/icon?size=192&maskable=1&v=20260416-3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/api/icon?size=384",
+      "src": "/api/icon?size=384&v=20260416-3",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=512",
+      "src": "/api/icon?size=512&v=20260416-3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/api/icon?size=512&maskable=1",
+      "src": "/api/icon?size=512&maskable=1&v=20260416-3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -79,14 +79,14 @@
       "short_name": "Saisie",
       "description": "Ouvrir le formulaire de saisie journalière",
       "url": "/saisie",
-      "icons": [{ "src": "/api/icon?size=96", "sizes": "96x96" }]
+      "icons": [{ "src": "/api/icon?size=96&v=20260416-3", "sizes": "96x96" }]
     },
     {
       "name": "Tableau de bord",
       "short_name": "Dashboard",
       "description": "Voir le tableau de bord",
       "url": "/",
-      "icons": [{ "src": "/api/icon?size=96", "sizes": "96x96" }]
+      "icons": [{ "src": "/api/icon?size=96&v=20260416-3", "sizes": "96x96" }]
     }
   ],
   "screenshots": []

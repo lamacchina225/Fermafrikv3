@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 const SPLASH_KEY = "fermafrik:splash:lastSeenAt";
-const SPLASH_DURATION_MS = 1400;
+const SPLASH_DURATION_MS = 2200;
 const SPLASH_COOLDOWN_MS = 1000 * 60 * 15;
 
 export function AppStartupScreen() {
@@ -32,16 +33,24 @@ export function AppStartupScreen() {
       aria-hidden={!visible}
       className={`startup-screen ${visible ? "startup-screen--visible" : ""}`}
     >
-      <div className="startup-screen__panel">
-        <div className="startup-screen__brand-mark">FA</div>
-        <div className="startup-screen__text">
-          <p className="startup-screen__eyebrow">Gestion privee de la ferme</p>
-          <h1 className="startup-screen__title">Ferm&apos;Afrik</h1>
-          <p className="startup-screen__subtitle">
-            Production, stock et suivi quotidien reunis dans une seule application.
-          </p>
+      <div className="startup-screen__card">
+        <div className="startup-screen__logo-wrap">
+          <div className="startup-screen__ring" />
+          <div className="startup-screen__logo">
+            <Image
+              src="/logo.png"
+              alt="Ferm'Afrik — Smart Farming, Simplified"
+              width={180}
+              height={180}
+              priority
+              className="startup-screen__logo-img"
+            />
+            <span className="startup-screen__shine" aria-hidden="true" />
+          </div>
         </div>
-        <div className="startup-screen__loader" />
+        <div className="startup-screen__progress" aria-hidden="true">
+          <span className="startup-screen__progress-bar" />
+        </div>
       </div>
     </div>
   );

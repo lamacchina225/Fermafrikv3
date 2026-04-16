@@ -6,6 +6,7 @@ import { SessionProvider } from "@/lib/session-provider";
 import { PwaRegister } from "@/components/PwaRegister";
 import { AppStartupScreen } from "@/components/AppStartupScreen";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
+import { ICON_VERSION } from "@/lib/icon-url";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     template: "%s | Ferm'Afrik",
   },
   description: "Application de gestion de ferme avicole – Burkina Faso",
-  manifest: "/manifest.json",
+  manifest: `/manifest.json?v=${ICON_VERSION}`,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -35,11 +36,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/api/icon?size=32", sizes: "32x32", type: "image/png" },
-      { url: "/api/icon?size=192", sizes: "192x192", type: "image/png" },
+      { url: `/api/icon?size=32&v=${ICON_VERSION}`, sizes: "32x32", type: "image/png" },
+      { url: `/api/icon?size=192&v=${ICON_VERSION}`, sizes: "192x192", type: "image/png" },
     ],
     apple: [
-      { url: "/apple-icon", sizes: "180x180", type: "image/png" },
+      { url: `/apple-icon?v=${ICON_VERSION}`, sizes: "180x180", type: "image/png" },
     ],
   },
 };
@@ -57,7 +58,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Ferm'Afrik" />
-        <link rel="mask-icon" href="/api/icon?size=512" color="#2d6a4f" />
+        <link rel="mask-icon" href={`/api/icon?size=512&v=${ICON_VERSION}`} color="#2d6a4f" />
       </head>
       <body className={inter.className}>
         <AppStartupScreen />

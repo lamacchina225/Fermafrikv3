@@ -7,6 +7,7 @@ export function PwaRegister() {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker
         .register("/sw.js")
+        .then((registration) => registration.update())
         .catch((err) => console.error("SW registration failed:", err));
     }
   }, []);
