@@ -45,7 +45,6 @@ export function AppStartupScreen() {
               priority
               className="startup-screen__logo-img"
             />
-            <span className="startup-screen__shine" aria-hidden="true" />
           </div>
         </div>
         <div className="startup-screen__progress" aria-hidden="true">

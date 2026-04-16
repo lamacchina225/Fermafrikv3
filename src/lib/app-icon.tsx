@@ -2,21 +2,12 @@ type AppIconProps = {
   size: number;
   logoUrl?: string;
   maskable?: boolean;
-  showWordmark?: boolean;
 };
 
-export function AppIcon({ size, logoUrl, maskable = false, showWordmark = false }: AppIconProps) {
+export function AppIcon({ size, logoUrl, maskable = false }: AppIconProps) {
   const resolvedLogoUrl = logoUrl === null ? null : (logoUrl ?? "/logo.png");
   const radius = maskable ? size * 0.26 : size * 0.22;
-  const padding = maskable ? size * 0.18 : size * 0.12;
-  const logoScale = showWordmark ? 0.9 : 1.75;
-  const logoShift = showWordmark ? 0 : size * 0.52;
-  const logoSurfaceBackground = resolvedLogoUrl
-    ? "linear-gradient(180deg, #ffffff 0%, #f7f2e6 100%)"
-    : "rgba(255, 255, 255, 0.04)";
-  const logoSurfaceShadow = resolvedLogoUrl
-    ? "0 10px 22px rgba(7, 21, 14, 0.18), inset 0 0 0 1px rgba(22, 49, 33, 0.08)"
-    : "inset 0 0 0 1px rgba(255, 255, 255, 0.05)";
+  const padding = maskable ? size * 0.14 : size * 0.06;
 
   return (
     <div
@@ -33,52 +24,37 @@ export function AppIcon({ size, logoUrl, maskable = false, showWordmark = false 
         boxSizing: "border-box",
       }}
     >
-        <div
+      {resolvedLogoUrl ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={resolvedLogoUrl}
+          alt="Ferm'Afrik"
           style={{
             width: "100%",
             height: "100%",
-            borderRadius: `${radius * 0.7}px`,
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: logoSurfaceBackground,
-            boxShadow: logoSurfaceShadow,
+            objectFit: "contain",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: "68%",
+            height: "68%",
+            borderRadius: "34% 34% 42% 42%",
+            background: "linear-gradient(180deg, #efc05d 0%, #d79c31 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#173121",
+            fontSize: size * 0.24,
+            fontWeight: 800,
+            letterSpacing: "-0.06em",
+            boxShadow: "0 12px 28px rgba(0, 0, 0, 0.18)",
           }}
         >
-          {resolvedLogoUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={resolvedLogoUrl}
-              alt="Ferm'Afrik"
-              style={{
-                width: `${logoScale * 100}%`,
-                height: `${logoScale * 100}%`,
-                objectFit: "contain",
-                transform: `translateX(${logoShift}px)`,
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: "68%",
-                height: "68%",
-                borderRadius: "34% 34% 42% 42%",
-                background: "linear-gradient(180deg, #efc05d 0%, #d79c31 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#173121",
-                fontSize: size * 0.24,
-                fontWeight: 800,
-                letterSpacing: "-0.06em",
-                boxShadow: "0 12px 28px rgba(0, 0, 0, 0.18)",
-              }}
-            >
-              FA
-            </div>
-          )}
-      </div>
+          FA
+        </div>
+      )}
     </div>
   );
 }
