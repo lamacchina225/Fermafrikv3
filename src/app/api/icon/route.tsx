@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const logoUrl = host ? `${protocol}://${host}/logo.png` : undefined;
 
   return new ImageResponse(
-    <AppIcon size={size} logoUrl={logoUrl} maskable={maskable} />,
+    <AppIcon size={size} logoUrl={logoUrl} maskable={maskable} logoScale={1.55} />,
     { width: size, height: size }
   );
 }

@@ -8,5 +8,5 @@ export const contentType = "image/png";
 export default async function Icon() {
   const logoUrl = await getAbsoluteLogoUrl();
 
-  return new ImageResponse(<AppIcon size={32} logoUrl={logoUrl} />, size);
+  return new ImageResponse(<AppIcon size={32} logoUrl={logoUrl} logoScale={1.55} />, size);
 }

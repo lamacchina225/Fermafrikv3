@@ -1,8 +1,6 @@
-const CACHE_NAME = "fermafrik-v4";
+const CACHE_NAME = "fermafrik-v5";
 const STATIC_ASSETS = [
   "/offline",
-  "/manifest.json",
-  "/logo.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -38,6 +36,8 @@ self.addEventListener("fetch", (event) => {
   if (requestUrl.origin !== self.location.origin) return;
   if (requestUrl.pathname.startsWith("/api/auth")) return;
   if (requestUrl.pathname.startsWith("/_next/")) return;
+  if (requestUrl.pathname === "/manifest.json") return;
+  if (requestUrl.pathname === "/logo.png") return;
 
   if (requestUrl.pathname.startsWith("/api/")) {
     event.respondWith(

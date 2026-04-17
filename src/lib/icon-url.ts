@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 export const ICON_VERSION = "20260416-5";
+export const PWA_LOGO_PATH = "/logo-pwa.png";
 
 export async function getAbsoluteLogoUrl() {
   const requestHeaders = await headers();
@@ -8,7 +9,7 @@ export async function getAbsoluteLogoUrl() {
   const host = forwardedHost ?? requestHeaders.get("host");
 
   if (!host) {
-    return `/logo.png?v=${ICON_VERSION}`;
+    return `${PWA_LOGO_PATH}?v=${ICON_VERSION}`;
   }
 
   const forwardedProto = requestHeaders.get("x-forwarded-proto");
@@ -16,5 +17,5 @@ export async function getAbsoluteLogoUrl() {
     forwardedProto ??
     (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
 
-  return `${protocol}://${host}/logo.png?v=${ICON_VERSION}`;
+  return `${protocol}://${host}${PWA_LOGO_PATH}?v=${ICON_VERSION}`;
 }

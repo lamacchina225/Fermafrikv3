@@ -2,9 +2,15 @@ type AppIconProps = {
   size: number;
   logoUrl?: string;
   maskable?: boolean;
+  logoScale?: number;
 };
 
-export function AppIcon({ size, logoUrl, maskable = false }: AppIconProps) {
+export function AppIcon({
+  size,
+  logoUrl,
+  maskable = false,
+  logoScale = 1,
+}: AppIconProps) {
   const resolvedLogoUrl = logoUrl === null ? null : (logoUrl ?? "/logo.png");
   const radius = maskable ? size * 0.26 : size * 0.22;
   const padding = maskable ? size * 0.14 : size * 0.06;
@@ -33,6 +39,8 @@ export function AppIcon({ size, logoUrl, maskable = false }: AppIconProps) {
             width: "100%",
             height: "100%",
             objectFit: "contain",
+            transform: `scale(${logoScale})`,
+            transformOrigin: "center",
           }}
         />
       ) : (

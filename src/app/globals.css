@@ -183,7 +183,25 @@ body, #__next {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  transform: scale(2);
+  transform-origin: center;
+  animation: startup-logo-image-in 800ms ease forwards;
   filter: drop-shadow(0 10px 20px rgba(17, 24, 39, 0.16));
+}
+
+.login-logo-img {
+  transform: scale(2);
+  transform-origin: center;
+}
+
+.navbar-mobile-logo-img {
+  transform: scale(2.45);
+  transform-origin: center;
+}
+
+.navbar-sidebar-logo-img {
+  transform: scale(2.15);
+  transform-origin: center;
 }
 
 .startup-screen__ring-bg {
@@ -307,6 +325,15 @@ body, #__next {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes startup-logo-image-in {
+  from {
+    transform: scale(1.68);
+  }
+  to {
+    transform: scale(2);
   }
 }
 

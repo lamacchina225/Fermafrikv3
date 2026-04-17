@@ -62,17 +62,16 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-4">
+          <div className="mx-auto mb-5 flex h-52 w-96 max-w-full items-center justify-center overflow-hidden">
             <Image
               src="/logo.png"
               alt="Ferm'Afrik"
-              width={160}
-              height={160}
-              className="drop-shadow-xl"
+              width={420}
+              height={210}
+              className="login-logo-img h-full w-full object-contain drop-shadow-xl"
               priority
             />
           </div>
-          <p className="text-white/70 mt-1 text-sm">Gestion de ferme avicole</p>
         </div>
 
         {/* Formulaire */}

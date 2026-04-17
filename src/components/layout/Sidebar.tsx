@@ -42,7 +42,7 @@ export function Sidebar({ userRole, username }: SidebarProps) {
           alt="Ferm'Afrik"
           width={140}
           height={60}
-          className="object-contain drop-shadow-md"
+          className="navbar-sidebar-logo-img object-contain drop-shadow-md"
           style={{ filter: "brightness(1.15) contrast(1.05)" }}
           priority
         />
