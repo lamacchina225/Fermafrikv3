@@ -4,10 +4,12 @@ import {
   formatNumber,
   calculateTauxPonte,
   calculateEffectifVivant,
+  calculateMortalityFromLivingHens,
   calculateStockOeufs,
   eggsToTrays,
   traysToEggs,
   calculateBeneficeNet,
+  buildExpenseLabel,
   canWrite,
   isAdmin,
   getCategoryLabel,
@@ -69,6 +71,20 @@ describe("calculateEffectifVivant", () => {
   });
 });
 
+describe("calculateMortalityFromLivingHens", () => {
+  it("calcule la mortalité nécessaire", () => {
+    expect(calculateMortalityFromLivingHens(600, 592)).toBe(8);
+  });
+
+  it("borne la cible à zéro", () => {
+    expect(calculateMortalityFromLivingHens(600, -5)).toBe(600);
+  });
+
+  it("borne la cible à l'effectif de départ", () => {
+    expect(calculateMortalityFromLivingHens(600, 650)).toBe(0);
+  });
+});
+
 describe("calculateStockOeufs", () => {
   it("calcule le stock correct", () => {
     expect(calculateStockOeufs(10000, 100, 500)).toBe(6500);
@@ -119,5 +135,19 @@ describe("getCategoryLabel", () => {
   });
   it("retourne la clé si inconnu", () => {
     expect(getCategoryLabel("unknown")).toBe("unknown");
+  });
+});
+
+describe("buildExpenseLabel", () => {
+  it("garde le libellé saisi quand il existe", () => {
+    expect(buildExpenseLabel("Vaccins lot A", "sante")).toBe("Vaccins lot A");
+  });
+
+  it("génère un libellé par défaut à partir de la catégorie", () => {
+    expect(buildExpenseLabel("", "sante")).toBe("Frais de santé");
+  });
+
+  it("retombe sur une dépense diverse si la catégorie manque", () => {
+    expect(buildExpenseLabel("", undefined)).toBe("Dépense diverse");
   });
 });

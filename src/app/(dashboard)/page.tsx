@@ -1,6 +1,6 @@
 import { format, subDays } from "date-fns";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { DollarSign, Egg, Package, TrendingUp, Users } from "lucide-react";
+import { DollarSign, Egg, TrendingUp, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/layout/Header";
@@ -9,15 +9,16 @@ import { CycleTimeline } from "@/components/timeline/CycleTimeline";
 import { DailySummary } from "@/components/dashboard/DailySummary";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { MonthlyProduction } from "@/components/dashboard/MonthlyProduction";
+import { ToggleKpiCard } from "@/components/dashboard/ToggleKpiCard";
 import { db } from "@/db";
 import { buildings, cycles, dailyRecords, expenses, sales } from "@/db/schema";
 import {
+  AUTO_FEED_EXPENSE_LABEL,
   calculateEffectifVivant,
-  eggsToTrays,
   formatNumber,
   formatXOF,
-  EGGS_PER_TRAY,
 } from "@/lib/utils";
+import { getCurrentBusinessPeriod, isIsoDateWithinPeriod } from "@/lib/business-period";
 
 async function getDashboardData(farmId: number) {
   const building = await db.query.buildings.findFirst({
@@ -34,12 +35,11 @@ async function getDashboardData(farmId: number) {
   if (!cycle) return { building, cycle: null };
 
   const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  const currentBusinessPeriod = getCurrentBusinessPeriod();
 
   const cycleFilter = and(eq(dailyRecords.farmId, farmId), eq(dailyRecords.cycleId, cycle.id));
-  const salesFilter = and(eq(sales.farmId, farmId), eq(sales.cycleId, cycle.id));
 
-  // Requêtes parallèles — ~3x plus rapide que séquentiel
-  const [yesterdayRecord, cycleAggregates, salesAggregates, expensesTotal] =
+  const [yesterdayRecord, cycleAggregates, cycleSales, cycleRecords, cycleExpenses] =
     await Promise.all([
       db.query.dailyRecords.findFirst({
         where: and(
@@ -53,33 +53,40 @@ async function getDashboardData(farmId: number) {
           totalEggs: sql<number>`COALESCE(SUM(${dailyRecords.eggsCollected}), 0)`,
           totalBroken: sql<number>`COALESCE(SUM(${dailyRecords.eggsBroken}), 0)`,
           totalMortality: sql<number>`COALESCE(SUM(${dailyRecords.mortalityCount}), 0)`,
-          totalFeedCost: sql<number>`COALESCE(SUM(CAST(${dailyRecords.feedCost} AS NUMERIC)), 0)`,
         })
         .from(dailyRecords)
         .where(cycleFilter),
-      db
-        .select({
-          totalTrays: sql<number>`COALESCE(SUM(${sales.traysSold}), 0)`,
-          totalRevenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS NUMERIC)), 0)`,
-        })
-        .from(sales)
-        .where(salesFilter),
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS NUMERIC)), 0)`,
-        })
-        .from(expenses)
-        .where(and(eq(expenses.farmId, farmId), eq(expenses.cycleId, cycle.id))),
+      db.query.sales.findMany({
+        where: and(eq(sales.farmId, farmId), eq(sales.cycleId, cycle.id)),
+        columns: {
+          saleDate: true,
+          totalAmount: true,
+        },
+      }),
+      db.query.dailyRecords.findMany({
+        where: cycleFilter,
+        columns: {
+          recordDate: true,
+          eggsCollected: true,
+          feedCost: true,
+        },
+      }),
+      db.query.expenses.findMany({
+        where: and(eq(expenses.farmId, farmId), eq(expenses.cycleId, cycle.id)),
+        columns: {
+          expenseDate: true,
+          label: true,
+          category: true,
+          amount: true,
+        },
+      }),
     ]);
 
   const agg = cycleAggregates[0] ?? {
     totalEggs: 0,
     totalBroken: 0,
     totalMortality: 0,
-    totalFeedCost: 0,
   };
-  const salesAgg = salesAggregates[0] ?? { totalTrays: 0, totalRevenue: 0 };
-  const expTotal = Number(expensesTotal[0]?.total ?? 0);
 
   const effectifVivant = calculateEffectifVivant(
     cycle.initialCount,
@@ -87,17 +94,45 @@ async function getDashboardData(farmId: number) {
   );
 
   const totalEggsCycle = Number(agg.totalEggs);
-  const totalBrokenCycle = Number(agg.totalBroken);
-  const totalSoldTrays = Number(salesAgg.totalTrays);
-  const stockOeufs = Math.max(
-    0,
-    totalEggsCycle - totalBrokenCycle - totalSoldTrays * EGGS_PER_TRAY
+  const autoFeedExpenseDates = new Set(
+    cycleExpenses
+      .filter((expense) => expense.label === AUTO_FEED_EXPENSE_LABEL && expense.category === "alimentation")
+      .map((expense) => expense.expenseDate)
   );
-  const stockPlaquettes = eggsToTrays(stockOeufs);
-
-  const totalRevenue = Number(salesAgg.totalRevenue);
-  const totalExpenses = expTotal + Number(agg.totalFeedCost);
+  const unresolvedFeedCostTotal = cycleRecords.reduce((sum, record) => {
+    if (autoFeedExpenseDates.has(record.recordDate)) return sum;
+    return sum + Number(record.feedCost ?? 0);
+  }, 0);
+  const totalRevenue = cycleSales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+  const totalExpenses =
+    cycleExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0) +
+    unresolvedFeedCostTotal;
   const beneficeNet = totalRevenue - totalExpenses;
+
+  const monthRecords = cycleRecords.filter((record) =>
+    isIsoDateWithinPeriod(record.recordDate, currentBusinessPeriod.start, currentBusinessPeriod.end)
+  );
+  const monthSales = cycleSales.filter((sale) =>
+    isIsoDateWithinPeriod(sale.saleDate, currentBusinessPeriod.start, currentBusinessPeriod.end)
+  );
+  const monthExpenses = cycleExpenses.filter((expense) =>
+    isIsoDateWithinPeriod(expense.expenseDate, currentBusinessPeriod.start, currentBusinessPeriod.end)
+  );
+  const monthAutoFeedExpenseDates = new Set(
+    monthExpenses
+      .filter((expense) => expense.label === AUTO_FEED_EXPENSE_LABEL && expense.category === "alimentation")
+      .map((expense) => expense.expenseDate)
+  );
+  const monthUnresolvedFeedCostTotal = monthRecords.reduce((sum, record) => {
+    if (monthAutoFeedExpenseDates.has(record.recordDate)) return sum;
+    return sum + Number(record.feedCost ?? 0);
+  }, 0);
+  const currentPeriodEggs = monthRecords.reduce((sum, record) => sum + Number(record.eggsCollected ?? 0), 0);
+  const currentPeriodRevenue = monthSales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+  const currentPeriodExpenses =
+    monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0) +
+    monthUnresolvedFeedCostTotal;
+  const currentPeriodBeneficeNet = currentPeriodRevenue - currentPeriodExpenses;
 
   const tauxPonteVeille = yesterdayRecord
     ? Number(
@@ -112,12 +147,14 @@ async function getDashboardData(farmId: number) {
     effectifVivant,
     totalMortality: Number(agg.totalMortality),
     tauxPonteVeille,
-    stockOeufs,
-    stockPlaquettes,
     totalRevenue,
     totalExpenses,
     beneficeNet,
     totalEggsCycle,
+    currentBusinessPeriodLabel: currentBusinessPeriod.labelToDate,
+    currentPeriodEggs,
+    currentPeriodRevenue,
+    currentPeriodBeneficeNet,
     yesterdayEggs: yesterdayRecord?.eggsCollected ?? 0,
   };
 }
@@ -178,7 +215,6 @@ export default async function DashboardPage() {
       />
       <div className="p-6 space-y-6 bg-slate-50">
         <DashboardAlerts
-          stockPlaquettes={data.stockPlaquettes}
           tauxPonteVeille={data.tauxPonteVeille}
           yesterdayEggs={data.yesterdayEggs}
           effectifVivant={data.effectifVivant}
@@ -213,26 +249,50 @@ export default async function DashboardPage() {
             icon={<TrendingUp className="h-6 w-6" />}
             color="blue"
           />
-          <KpiCard
-            title="Oeufs depuis le debut"
-            value={formatNumber(data.totalEggsCycle)}
-            subtitle="Cycle en cours"
+          <ToggleKpiCard
+            primary={{
+              title: "Oeufs cycle",
+              value: formatNumber(data.totalEggsCycle),
+              subtitle: "Cycle en cours",
+            }}
+            secondary={{
+              title: "Oeufs mois en cours",
+              value: formatNumber(data.currentPeriodEggs),
+              subtitle: data.currentBusinessPeriodLabel,
+            }}
             icon={<Egg className="h-6 w-6" />}
-            color="orange"
+            primaryColor="orange"
+            secondaryColor="orange"
           />
-          <KpiCard
-            title="Stock oeufs"
-            value={formatNumber(data.stockOeufs)}
-            subtitle={`${formatNumber(data.stockPlaquettes)} plaquettes`}
-            icon={<Package className="h-6 w-6" />}
-            color="gray"
-          />
-          <KpiCard
-            title="Benefice net cycle"
-            value={formatXOF(data.beneficeNet)}
-            subtitle="CA - depenses"
+          <ToggleKpiCard
+            primary={{
+              title: "CA cycle",
+              value: formatXOF(data.totalRevenue),
+              subtitle: "Ventes du cycle",
+            }}
+            secondary={{
+              title: "CA mois en cours",
+              value: formatXOF(data.currentPeriodRevenue),
+              subtitle: data.currentBusinessPeriodLabel,
+            }}
             icon={<DollarSign className="h-6 w-6" />}
-            color={data.beneficeNet >= 0 ? "green" : "red"}
+            primaryColor="gray"
+            secondaryColor="gray"
+          />
+          <ToggleKpiCard
+            primary={{
+              title: "Benefice net cycle",
+              value: formatXOF(data.beneficeNet),
+              subtitle: "CA - depenses",
+            }}
+            secondary={{
+              title: "Benefice net mois en cours",
+              value: formatXOF(data.currentPeriodBeneficeNet),
+              subtitle: data.currentBusinessPeriodLabel,
+            }}
+            icon={<DollarSign className="h-6 w-6" />}
+            primaryColor={data.beneficeNet >= 0 ? "green" : "red"}
+            secondaryColor={data.currentPeriodBeneficeNet >= 0 ? "green" : "red"}
           />
         </div>
 

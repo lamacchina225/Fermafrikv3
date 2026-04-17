@@ -110,4 +110,57 @@ describe("POST /api/health", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it("crée un enregistrement santé et une dépense santé liée si le coût est positif", async () => {
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
+
+    const healthReturning = vi.fn().mockResolvedValueOnce([{ id: 12, ...validHealth }]);
+    const expenseValues = vi.fn().mockResolvedValueOnce(undefined);
+    const insert = vi.fn()
+      .mockReturnValueOnce({
+        values: vi.fn().mockReturnValue({
+          returning: healthReturning,
+        }),
+      })
+      .mockReturnValueOnce({
+        values: expenseValues,
+      });
+
+    mockDb.transaction = vi.fn(async (callback) => callback({ insert } as never)) as never;
+
+    const res = await POST(makePostRequest(validHealth), ctx);
+    expect(res.status).toBe(200);
+
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(expenseValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "sante",
+        label: "Vaccination - IB+ND",
+        amount: "15000",
+        expenseDate: "2026-04-10",
+      })
+    );
+  });
+
+  it("ne crée pas de dépense liée si le coût est nul ou absent", async () => {
+    mockAuth.mockResolvedValueOnce({
+      user: { id: "1", role: "admin", name: "admin", farmId: "1" },
+    } as never);
+
+    const insert = vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValueOnce([{ id: 13, ...validHealth, cost: 0 }]),
+      }),
+    });
+
+    mockDb.transaction = vi.fn(async (callback) =>
+      callback({ insert } as never)
+    ) as never;
+
+    const res = await POST(makePostRequest({ ...validHealth, cost: 0 }), ctx);
+    expect(res.status).toBe(200);
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
 });

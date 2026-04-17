@@ -107,10 +107,16 @@ export async function handleInfo(farmId: number) {
   if (!building) return NextResponse.json({ error: "Aucun bâtiment actif" }, { status: 404 });
   const cycle = await getActiveCycle(farmId, building.id);
   if (!cycle) return NextResponse.json({ error: "Aucun cycle actif" }, { status: 404 });
+  const totalMortality = await getCycleMortality(farmId, cycle.id);
+  const effectifVivant = Math.max(0, cycle.initialCount - totalMortality);
+
   return NextResponse.json({
     buildingId: building.id,
     buildingName: building.name,
     cycleId: cycle.id,
+    initialCount: cycle.initialCount,
+    totalMortality,
+    effectifVivant,
   });
 }
 

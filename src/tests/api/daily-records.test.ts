@@ -67,6 +67,46 @@ describe("POST /api/daily-records", () => {
     expect(json.updated).toBe(false);
   });
 
+  it("crée aussi une dépense automatique d'alimentation si feedCost > 0", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
+
+    const dailyInsertReturning = vi.fn().mockResolvedValueOnce([{ id: 43 }]);
+    const expenseInsertValues = vi.fn().mockResolvedValueOnce(undefined);
+    const insert = vi.fn()
+      .mockReturnValueOnce({
+        values: vi.fn().mockReturnValue({
+          returning: dailyInsertReturning,
+        }),
+      })
+      .mockReturnValueOnce({
+        values: expenseInsertValues,
+      });
+
+    (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
+      callback({
+        ...mockDb,
+        insert,
+        query: {
+          ...mockDb.query,
+          dailyRecords: { findFirst: vi.fn().mockResolvedValueOnce(null) },
+          expenses: { findMany: vi.fn().mockResolvedValueOnce([]) },
+        },
+      } as never)
+    );
+
+    const res = await POST(makePostRequest({ ...validPayload, feedCost: 24000 }), ctx);
+    expect(res.status).toBe(200);
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(expenseInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "Alimentation quotidienne",
+        category: "alimentation",
+        amount: "24000",
+        expenseDate: "2026-03-31",
+      })
+    );
+  });
+
   it("met à jour si une saisie existe déjà pour ce jour", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce({ id: 10 });

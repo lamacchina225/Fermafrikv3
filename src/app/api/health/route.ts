@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { healthRecords } from "@/db/schema";
+import { expenses, healthRecords } from "@/db/schema";
 import { desc, eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
@@ -16,6 +16,15 @@ const healthSchema = z.object({
   cost: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
 });
+
+function buildHealthExpenseLabel(
+  type: "vaccination" | "medication",
+  productName: string
+): string {
+  return type === "vaccination"
+    ? `Vaccination - ${productName}`
+    : `Médicament - ${productName}`;
+}
 
 async function handleGet(req: NextRequest, ctx: AuthContext) {
   const { searchParams } = new URL(req.url);
@@ -50,23 +59,41 @@ async function handlePost(req: NextRequest, ctx: AuthContext) {
     const body = await req.json();
     const data = healthSchema.parse(body);
 
-    const inserted = await db
-      .insert(healthRecords)
-      .values({
-        farmId: ctx.farmId,
-        cycleId: data.cycleId,
-        buildingId: data.buildingId,
-        recordDate: data.recordDate,
-        type: data.type,
-        productName: data.productName,
-        dose: data.dose,
-        cost: data.cost?.toString(),
-        notes: data.notes,
-        createdBy: ctx.userId,
-      })
-      .returning();
+    const record = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(healthRecords)
+        .values({
+          farmId: ctx.farmId,
+          cycleId: data.cycleId,
+          buildingId: data.buildingId,
+          recordDate: data.recordDate,
+          type: data.type,
+          productName: data.productName,
+          dose: data.dose,
+          cost: data.cost?.toString(),
+          notes: data.notes,
+          createdBy: ctx.userId,
+        })
+        .returning();
 
-    return NextResponse.json({ success: true, record: inserted[0] });
+      const safeCost = Number(data.cost ?? 0);
+      if (safeCost > 0) {
+        await tx.insert(expenses).values({
+          farmId: ctx.farmId,
+          cycleId: data.cycleId,
+          buildingId: data.buildingId,
+          expenseDate: data.recordDate,
+          label: buildHealthExpenseLabel(data.type, data.productName),
+          amount: safeCost.toString(),
+          category: "sante",
+          createdBy: ctx.userId,
+        });
+      }
+
+      return inserted[0];
+    });
+
+    return NextResponse.json({ success: true, record });
   } catch (error) {
     return handleApiError(error, "santé");
   }
