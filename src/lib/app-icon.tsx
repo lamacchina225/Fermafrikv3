@@ -1,3 +1,5 @@
+import { PWA_LOGO_PATH } from "@/lib/icon-url";
+
 type AppIconProps = {
   size: number;
   logoUrl?: string;
@@ -11,7 +13,7 @@ export function AppIcon({
   maskable = false,
   logoScale = 1,
 }: AppIconProps) {
-  const resolvedLogoUrl = logoUrl === null ? null : (logoUrl ?? "/logo.png");
+  const resolvedLogoUrl = logoUrl === null ? null : (logoUrl ?? PWA_LOGO_PATH);
   const radius = maskable ? size * 0.26 : size * 0.22;
   const padding = maskable ? size * 0.14 : size * 0.06;
 
