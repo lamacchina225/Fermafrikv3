@@ -120,92 +120,125 @@ body, #__next {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 300ms ease;
+  transition: opacity 600ms ease, transform 600ms ease;
   padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
   background:
-    radial-gradient(circle at 20% 15%, rgba(240, 195, 92, 0.22), transparent 42%),
-    radial-gradient(circle at 85% 90%, rgba(45, 106, 79, 0.35), transparent 45%),
-    linear-gradient(135deg, #0f2618 0%, #1a3a28 48%, #071610 100%);
+    radial-gradient(circle at 18% 16%, rgba(255, 232, 164, 0.42), transparent 36%),
+    radial-gradient(circle at 82% 18%, rgba(86, 160, 110, 0.18), transparent 32%),
+    linear-gradient(135deg, #eef5f0 0%, #f6fbf7 44%, #ffffff 100%);
+  transform: scale(1);
 }
 
 .startup-screen--visible {
   opacity: 1;
 }
 
+.startup-screen--exit {
+  opacity: 0;
+  transform: scale(1.05);
+}
+
 .startup-screen__card {
-  width: min(92vw, 360px);
+  width: min(92vw, 420px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 32px 36px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
+  padding: 36px 32px 30px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.64);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 22px 60px rgba(17, 24, 39, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .startup-screen__logo-wrap {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   display: grid;
   place-items: center;
 }
 
-.startup-screen__ring {
+.startup-screen__progress-ring {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  padding: 3px;
-  background: conic-gradient(
-    from 0deg,
-    rgba(244, 208, 111, 0) 0deg,
-    rgba(244, 208, 111, 0.9) 90deg,
-    rgba(45, 106, 79, 0.9) 180deg,
-    rgba(244, 208, 111, 0) 360deg
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  animation: startup-ring 2.2s linear infinite;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
 }
 
 .startup-screen__logo {
   position: relative;
-  width: 180px;
-  height: 180px;
+  width: 260px;
+  height: 260px;
   display: grid;
   place-items: center;
+  animation: startup-logo-in 800ms ease forwards;
 }
 
 .startup-screen__logo-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 10px 20px rgba(17, 24, 39, 0.16));
 }
 
-.startup-screen__progress {
-  margin-top: 28px;
-  width: 140px;
-  height: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
+.startup-screen__ring-bg {
+  fill: none;
+  stroke: rgba(27, 94, 32, 0.12);
+  stroke-width: 4;
+}
+
+.startup-screen__ring {
+  fill: none;
+  stroke: #2e7d32;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 326.73;
+  stroke-dashoffset: 326.73;
+  animation: startup-progress-ring 1.8s ease forwards;
+}
+
+.startup-screen__ring--complete {
+  stroke-dashoffset: 0;
+}
+
+.startup-screen__check {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2e7d32;
+  font-size: 38px;
+  font-weight: 700;
   opacity: 0;
-  animation: startup-fade-slide 600ms ease 300ms forwards;
+  transform: scale(0.45);
 }
 
-.startup-screen__progress-bar {
-  display: block;
-  width: 40%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #f4d06f 0%, #ffffff 100%);
-  animation: startup-progress 1.2s ease-in-out infinite;
+.startup-screen__check--visible {
+  animation: startup-check-pop 420ms ease forwards;
+}
+
+.startup-screen__brand {
+  margin-top: 20px;
+  color: #1b5e20;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-align: center;
+}
+
+.startup-screen__slogan {
+  margin-top: 8px;
+  color: #4caf50;
+  font-size: 0.82rem;
+  text-align: center;
+  opacity: 0;
+  animation: startup-slogan-in 700ms ease 280ms forwards;
 }
 
 .connectivity-banner {
@@ -266,29 +299,33 @@ body, #__next {
   animation: pulse-slow 2s ease-in-out infinite;
 }
 
-@keyframes startup-ring {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes startup-fade-slide {
+@keyframes startup-logo-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: scale(0.84);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
-@keyframes startup-progress {
-  0% {
-    transform: translateX(-120%);
+@keyframes startup-progress-ring {
+  to {
+    stroke-dashoffset: 0;
   }
-  100% {
-    transform: translateX(350%);
+}
+
+@keyframes startup-check-pop {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes startup-slogan-in {
+  to {
+    opacity: 1;
   }
 }
 

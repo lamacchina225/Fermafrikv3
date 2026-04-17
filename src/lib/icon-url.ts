@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-export const ICON_VERSION = "20260416-4";
+export const ICON_VERSION = "20260416-5";
 
 export async function getAbsoluteLogoUrl() {
   const requestHeaders = await headers();
