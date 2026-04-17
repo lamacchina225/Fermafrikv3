@@ -48,9 +48,10 @@ export function Header({ title, username, userRole }: HeaderProps) {
           <Image
             src="/logo.png"
             alt="Ferm'Afrik"
-            width={90}
-            height={36}
-            className="navbar-mobile-logo-img object-contain"
+            width={48}
+            height={48}
+            className="navbar-mobile-logo-img object-contain w-auto"
+            style={{ height: "44px", width: "auto" }}
             priority
           />
         </div>
