@@ -52,6 +52,10 @@ interface RecentRecord {
   feedQuantityKg: string | null;
   feedType: string | null;
   feedCost: string | null;
+  linkedExpenseId: number | null;
+  linkedExpenseLabel: string | null;
+  linkedExpenseAmount: string | null;
+  linkedExpenseCategory: "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre" | null;
 }
 
 interface BuildingInfo {
@@ -142,13 +146,19 @@ export default function SaisiePage() {
     setValue("mortalityCount", rec.mortalityCount);
     setValue("mortalityCause", rec.mortalityCause ?? "");
     setValue("feedQuantityKg", Number(rec.feedQuantityKg ?? 0));
+    setValue("feedType", (rec.feedType as "demarrage" | "croissance" | "ponte" | undefined) ?? undefined);
     setValue("feedCost", Number(rec.feedCost ?? 0));
+    setValue("expenseLabel", rec.linkedExpenseLabel ?? "");
+    setValue("expenseAmount", Number(rec.linkedExpenseAmount ?? 0) || 0);
+    setValue("expenseCategory", rec.linkedExpenseCategory ?? undefined);
     setOpenSections(["oeufs", "troupeau", "alimentation"]);
     window.scrollTo({ top: 0, behavior: "smooth" });
     toast.info(`Édition du ${format(new Date(rec.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })}`);
   };
 
   const currentMortalityValue = Number(watch("mortalityCount") ?? 0);
+  const currentFeedType = watch("feedType");
+  const currentExpenseCategory = watch("expenseCategory");
   const adjustedTotalMortality = useMemo(() => {
     if (!buildingInfo) return 0;
 
@@ -188,9 +198,18 @@ export default function SaisiePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          recordId: editingRecordId ?? undefined,
           ...data,
           buildingId: buildingInfo.buildingId,
           cycleId: buildingInfo.cycleId,
+          linkedExpense:
+            data.expenseLabel && data.expenseAmount && data.expenseAmount > 0
+              ? {
+                  label: data.expenseLabel,
+                  amount: data.expenseAmount,
+                  category: data.expenseCategory ?? "autre",
+                }
+              : undefined,
         }),
       });
 
@@ -202,26 +221,14 @@ export default function SaisiePage() {
       const result = await response.json();
       toast.success(result.updated ? "Saisie mise à jour !" : "Saisie enregistrée !");
 
-      if (data.expenseLabel && data.expenseAmount && data.expenseAmount > 0) {
-        await fetch("/api/expenses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            buildingId: buildingInfo.buildingId,
-            cycleId: buildingInfo.cycleId,
-            expenseDate: data.recordDate,
-            label: data.expenseLabel,
-            amount: data.expenseAmount,
-            category: data.expenseCategory ?? "autre",
-          }),
-        });
-        toast.success("Dépense enregistrée !");
-      }
-
       reset({
         recordDate: format(new Date(), "yyyy-MM-dd"),
         eggsCollected: 0, eggsBroken: 0, mortalityCount: 0,
         feedQuantityKg: 0, feedCost: 0,
+        feedType: undefined,
+        expenseLabel: "",
+        expenseAmount: 0,
+        expenseCategory: undefined,
       });
       setEditingRecordId(null);
       setOpenSections(["oeufs"]);
@@ -382,7 +389,11 @@ export default function SaisiePage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label>Type d&apos;aliment</Label>
-                          <Select onValueChange={(v) => setValue("feedType", v as "demarrage" | "croissance" | "ponte")} disabled={readonly}>
+                          <Select
+                            value={currentFeedType}
+                            onValueChange={(v) => setValue("feedType", v as "demarrage" | "croissance" | "ponte")}
+                            disabled={readonly}
+                          >
                             <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="demarrage">Démarrage</SelectItem>
@@ -418,7 +429,11 @@ export default function SaisiePage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label>Catégorie</Label>
-                          <Select onValueChange={(v) => setValue("expenseCategory", v as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")} disabled={readonly}>
+                          <Select
+                            value={currentExpenseCategory}
+                            onValueChange={(v) => setValue("expenseCategory", v as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")}
+                            disabled={readonly}
+                          >
                             <SelectTrigger><SelectValue placeholder="Choisir une catégorie..." /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="alimentation">Alimentation</SelectItem>
@@ -460,3 +475,4 @@ export default function SaisiePage() {
     </div>
   );
 }
+

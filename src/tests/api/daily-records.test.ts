@@ -25,41 +25,49 @@ const validPayload = {
   mortalityCount: 0,
 };
 
+const validLinkedExpense = {
+  label: "Achat vitamines",
+  amount: 15000,
+  category: "sante",
+} as const;
+
 describe("POST /api/daily-records", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("retourne 401 si non authentifié", async () => {
+  it("retourne 401 si non authentifie", async () => {
     mockAuth.mockResolvedValueOnce(null);
     const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(401);
   });
 
-  it("retourne 403 pour le rôle demo (lecture seule)", async () => {
+  it("retourne 403 pour le role demo (lecture seule)", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "3", role: "demo", name: "demo", farmId: "1" } } as never);
     const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(403);
   });
 
-  it("retourne 400 si les données sont invalides (oeufs négatifs)", async () => {
+  it("retourne 400 si les donnees sont invalides (oeufs negatifs)", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const res = await POST(makePostRequest({ ...validPayload, eggsCollected: -10 }), ctx);
     expect(res.status).toBe(400);
   });
 
-  it("retourne 400 si recordDate dépasse 10 chars", async () => {
+  it("retourne 400 si recordDate depasse 10 chars", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     const res = await POST(makePostRequest({ ...validPayload, recordDate: "2026-03-31T00:00:00Z" }), ctx);
     expect(res.status).toBe(400);
   });
 
-  it("crée une saisie avec des données valides", async () => {
+  it("cree une saisie avec des donnees valides", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce(null);
+    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce(null);
     (mockDb.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockResolvedValueOnce([{ id: 42 }]),
       }),
     });
+
     const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -67,15 +75,54 @@ describe("POST /api/daily-records", () => {
     expect(json.updated).toBe(false);
   });
 
-  it("met à jour si une saisie existe déjà pour ce jour", async () => {
+  it("met a jour si une saisie existe deja pour ce jour", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
     mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce({ id: 10 });
+    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce(null);
     (mockDb.update as ReturnType<typeof vi.fn>).mockReturnValue({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValueOnce(undefined),
       }),
     });
+
     const res = await POST(makePostRequest(validPayload), ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(json.id).toBe(10);
+  });
+
+  it("met a jour une saisie ciblee par recordId et sa depense liee", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
+    mockDb.query.dailyRecords.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: 10,
+        farmId: 1,
+        buildingId: 1,
+        cycleId: 1,
+        recordDate: "2026-03-30",
+      })
+      .mockResolvedValueOnce(null);
+    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce({
+      id: 90,
+      label: "[DAILY_RECORD:10] Ancienne depense",
+    });
+    (mockDb.update as ReturnType<typeof vi.fn>).mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      }),
+    });
+
+    const res = await POST(
+      makePostRequest({
+        ...validPayload,
+        recordId: 10,
+        linkedExpense: validLinkedExpense,
+      }),
+      ctx
+    );
+
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.updated).toBe(true);

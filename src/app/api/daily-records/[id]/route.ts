@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { dailyRecords, expenses } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
+import { getDailyRecordExpenseLikePattern } from "@/lib/daily-record-linked-expense";
 
 async function handleDelete(_req: NextRequest, ctx: AuthContext, params?: Record<string, string>) {
   const writeError = requireWrite(ctx);
@@ -21,13 +22,10 @@ async function handleDelete(_req: NextRequest, ctx: AuthContext, params?: Record
     return NextResponse.json({ error: "Saisie introuvable" }, { status: 404 });
   }
 
-  // Supprimer les dépenses liées
   await db.delete(expenses).where(
     and(
       eq(expenses.farmId, ctx.farmId),
-      eq(expenses.cycleId, record.cycleId),
-      eq(expenses.buildingId, record.buildingId),
-      eq(expenses.expenseDate, record.recordDate)
+      like(expenses.label, getDailyRecordExpenseLikePattern(record.id))
     )
   );
 

@@ -26,7 +26,7 @@ vi.mock("@/db", () => ({
       cycles: { findFirst: vi.fn(), findMany: vi.fn() },
       dailyRecords: { findFirst: vi.fn(), findMany: vi.fn() },
       sales: { findMany: vi.fn() },
-      expenses: { findMany: vi.fn() },
+      expenses: { findFirst: vi.fn(), findMany: vi.fn() },
       clients: { findFirst: vi.fn(), findMany: vi.fn() },
       settings: { findMany: vi.fn() },
       healthRecords: { findMany: vi.fn() },

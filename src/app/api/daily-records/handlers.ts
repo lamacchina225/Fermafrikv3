@@ -5,13 +5,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { dailyRecords, buildings, cycles } from "@/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { dailyRecords, buildings, cycles, expenses } from "@/db/schema";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { type AuthContext } from "@/lib/api-auth";
 import { DEFAULT_PAGINATION_LIMIT, MAX_PAGINATION_LIMIT } from "@/lib/constants";
 import { handleReport } from "./report";
+import { parseDailyRecordExpenseLabel } from "@/lib/daily-record-linked-expense";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,54 @@ export async function handleRecent(farmId: number) {
     orderBy: [desc(dailyRecords.recordDate)],
     limit: 14,
   });
-  return NextResponse.json({ records });
+
+  if (records.length === 0) {
+    return NextResponse.json({ records });
+  }
+
+  const recordDates = [...new Set(records.map((record) => record.recordDate))];
+  const linkedExpenses = await db.query.expenses.findMany({
+    where: and(
+      eq(expenses.farmId, farmId),
+      eq(expenses.cycleId, cycle.id),
+      inArray(expenses.expenseDate, recordDates)
+    ),
+    orderBy: [desc(expenses.createdAt)],
+  });
+
+  const expenseEntries: Array<
+    readonly [number, { id: number; label: string; amount: string; category: string }]
+  > = [];
+
+  for (const expense of linkedExpenses) {
+    const parsed = parseDailyRecordExpenseLabel(expense.label);
+    if (!parsed) continue;
+
+    expenseEntries.push([
+      parsed.recordId,
+      {
+        id: expense.id,
+        label: parsed.label,
+        amount: expense.amount,
+        category: expense.category,
+      },
+    ] as const);
+  }
+
+  const expenseByRecordId = new Map(expenseEntries);
+
+  return NextResponse.json({
+    records: records.map((record) => {
+      const linkedExpense = expenseByRecordId.get(record.id);
+      return {
+        ...record,
+        linkedExpenseId: linkedExpense?.id ?? null,
+        linkedExpenseLabel: linkedExpense?.label ?? null,
+        linkedExpenseAmount: linkedExpense?.amount ?? null,
+        linkedExpenseCategory: linkedExpense?.category ?? null,
+      };
+    }),
+  });
 }
 
 export async function handleMonthly(

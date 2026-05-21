@@ -15,6 +15,10 @@ interface RecentRecord {
   feedQuantityKg: string | null;
   feedType: string | null;
   feedCost: string | null;
+  linkedExpenseId: number | null;
+  linkedExpenseLabel: string | null;
+  linkedExpenseAmount: string | null;
+  linkedExpenseCategory: "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre" | null;
 }
 
 interface Props {

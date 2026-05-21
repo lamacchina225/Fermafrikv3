@@ -5,6 +5,7 @@ import { desc, eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { withAuth, requireWrite, type AuthContext } from "@/lib/api-auth";
 import { handleApiError } from "@/lib/api-error";
+import { stripDailyRecordExpenseMetadata } from "@/lib/daily-record-linked-expense";
 
 const expenseSchema = z.object({
   buildingId: z.number(),
@@ -26,7 +27,12 @@ async function handleGet(req: NextRequest, ctx: AuthContext) {
     orderBy: [desc(expenses.expenseDate), desc(expenses.createdAt)],
   });
 
-  return NextResponse.json({ expenses: allExpenses });
+  return NextResponse.json({
+    expenses: allExpenses.map((expense) => ({
+      ...expense,
+      label: stripDailyRecordExpenseMetadata(expense.label),
+    })),
+  });
 }
 
 async function handlePost(req: NextRequest, ctx: AuthContext) {
