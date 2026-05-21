@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
-import { formatNumber, formatXOF, getCategoryLabel } from "@/lib/utils";
+import { cn, formatNumber, formatXOF, getCategoryLabel } from "@/lib/utils";
 
 /** Échappe les caractères HTML pour prévenir les injections XSS */
 function escapeHtml(str: string): string {
@@ -60,6 +60,32 @@ function entryTypeLabel(type: EntryType | ReportEntry["entryType"]) {
       return "Depense";
     default:
       return "Toutes";
+  }
+}
+
+function entryTypeStyles(type: ReportEntry["entryType"]) {
+  switch (type) {
+    case "sale":
+      return {
+        row: "bg-emerald-50/55",
+        badge: "bg-emerald-100 text-emerald-800",
+        amount: "text-emerald-700",
+        category: "text-emerald-700",
+      };
+    case "expense":
+      return {
+        row: "bg-rose-50/60",
+        badge: "bg-rose-100 text-rose-800",
+        amount: "text-rose-700",
+        category: "text-rose-700",
+      };
+    default:
+      return {
+        row: "bg-slate-50/70",
+        badge: "bg-slate-200 text-slate-700",
+        amount: "text-slate-700",
+        category: "text-slate-600",
+      };
   }
 }
 
@@ -397,39 +423,46 @@ export default function RapportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEntries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-slate-100 align-top">
-                      <td className="px-4 py-3 whitespace-nowrap text-slate-600">
-                        {entry.date}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                          {entryTypeLabel(entry.entryType)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {entry.label}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{entry.details}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {entry.entryType === "production"
-                          ? `${formatNumber(entry.eggsCollected ?? 0)} oeufs`
-                          : entry.entryType === "sale"
-                            ? `${formatNumber(entry.traysSold ?? 0)} plq`
-                            : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-900 font-medium">
-                        {formatXOF(entry.amountXof)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {entry.category === "production"
-                          ? "Production"
-                          : entry.category === "vente"
-                            ? "Vente"
-                            : getCategoryLabel(entry.category)}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredEntries.map((entry) => {
+                    const styles = entryTypeStyles(entry.entryType);
+
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={cn("border-t border-slate-100 align-top", styles.row)}
+                      >
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                          {entry.date}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-medium", styles.badge)}>
+                            {entryTypeLabel(entry.entryType)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {entry.label}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{entry.details}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {entry.entryType === "production"
+                            ? `${formatNumber(entry.eggsCollected ?? 0)} oeufs`
+                            : entry.entryType === "sale"
+                              ? `${formatNumber(entry.traysSold ?? 0)} plq`
+                              : "-"}
+                        </td>
+                        <td className={cn("px-4 py-3 font-medium", styles.amount)}>
+                          {formatXOF(entry.amountXof)}
+                        </td>
+                        <td className={cn("px-4 py-3", styles.category)}>
+                          {entry.category === "production"
+                            ? "Production"
+                            : entry.category === "vente"
+                              ? "Vente"
+                              : getCategoryLabel(entry.category)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

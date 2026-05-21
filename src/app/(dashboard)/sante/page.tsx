@@ -145,6 +145,14 @@ export default function SantePage() {
           </div>
         </div>
 
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+          <p className="text-sm text-emerald-800">
+            Chaque acte santé avec un coût est automatiquement ajouté aux dépenses dans la catégorie
+            {" "}
+            <span className="font-semibold">Santé</span>.
+          </p>
+        </div>
+
         {/* Historique */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">

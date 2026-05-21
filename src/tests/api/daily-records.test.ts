@@ -60,13 +60,23 @@ describe("POST /api/daily-records", () => {
 
   it("cree une saisie avec des donnees valides", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce(null);
-    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce(null);
-    (mockDb.insert as ReturnType<typeof vi.fn>).mockReturnValue({
+    const insert = vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockResolvedValueOnce([{ id: 42 }]),
       }),
     });
+
+    (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
+      callback({
+        ...mockDb,
+        insert,
+        query: {
+          ...mockDb.query,
+          dailyRecords: { findFirst: vi.fn().mockResolvedValueOnce(null) },
+          expenses: { findFirst: vi.fn().mockResolvedValue(null) },
+        },
+      } as never)
+    );
 
     const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(200);
@@ -75,15 +85,65 @@ describe("POST /api/daily-records", () => {
     expect(json.updated).toBe(false);
   });
 
+  it("cree aussi une depense automatique d'alimentation si feedCost > 0", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
+
+    const dailyInsertReturning = vi.fn().mockResolvedValueOnce([{ id: 43 }]);
+    const expenseInsertValues = vi.fn().mockResolvedValueOnce(undefined);
+    const insert = vi.fn()
+      .mockReturnValueOnce({
+        values: vi.fn().mockReturnValue({
+          returning: dailyInsertReturning,
+        }),
+      })
+      .mockReturnValueOnce({
+        values: expenseInsertValues,
+      });
+
+    (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
+      callback({
+        ...mockDb,
+        insert,
+        query: {
+          ...mockDb.query,
+          dailyRecords: { findFirst: vi.fn().mockResolvedValueOnce(null) },
+          expenses: { findFirst: vi.fn().mockResolvedValue(null) },
+        },
+      } as never)
+    );
+
+    const res = await POST(makePostRequest({ ...validPayload, feedCost: 24000 }), ctx);
+    expect(res.status).toBe(200);
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(expenseInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "Alimentation quotidienne",
+        category: "alimentation",
+        amount: "24000",
+        expenseDate: "2026-03-31",
+      })
+    );
+  });
+
   it("met a jour si une saisie existe deja pour ce jour", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    mockDb.query.dailyRecords.findFirst = vi.fn().mockResolvedValueOnce({ id: 10 });
-    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce(null);
-    (mockDb.update as ReturnType<typeof vi.fn>).mockReturnValue({
+    const update = vi.fn().mockReturnValue({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValueOnce(undefined),
       }),
     });
+
+    (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
+      callback({
+        ...mockDb,
+        update,
+        query: {
+          ...mockDb.query,
+          dailyRecords: { findFirst: vi.fn().mockResolvedValueOnce({ id: 10, cycleId: 1, buildingId: 1, recordDate: "2026-03-31" }) },
+          expenses: { findFirst: vi.fn().mockResolvedValue(null) },
+        },
+      } as never)
+    );
 
     const res = await POST(makePostRequest(validPayload), ctx);
     expect(res.status).toBe(200);
@@ -94,25 +154,42 @@ describe("POST /api/daily-records", () => {
 
   it("met a jour une saisie ciblee par recordId et sa depense liee", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    mockDb.query.dailyRecords.findFirst = vi
-      .fn()
-      .mockResolvedValueOnce({
-        id: 10,
-        farmId: 1,
-        buildingId: 1,
-        cycleId: 1,
-        recordDate: "2026-03-30",
-      })
-      .mockResolvedValueOnce(null);
-    mockDb.query.expenses.findFirst = vi.fn().mockResolvedValueOnce({
-      id: 90,
-      label: "[DAILY_RECORD:10] Ancienne depense",
-    });
-    (mockDb.update as ReturnType<typeof vi.fn>).mockReturnValue({
+    const update = vi.fn().mockReturnValue({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       }),
     });
+
+    (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
+      callback({
+        ...mockDb,
+        update,
+        query: {
+          ...mockDb.query,
+          dailyRecords: {
+            findFirst: vi
+              .fn()
+              .mockResolvedValueOnce({
+                id: 10,
+                farmId: 1,
+                buildingId: 1,
+                cycleId: 1,
+                recordDate: "2026-03-30",
+              })
+              .mockResolvedValueOnce(null),
+          },
+          expenses: {
+            findFirst: vi
+              .fn()
+              .mockResolvedValueOnce(null)
+              .mockResolvedValueOnce({
+                id: 90,
+                label: "[DAILY_RECORD:10] Ancienne depense",
+              }),
+          },
+        },
+      } as never)
+    );
 
     const res = await POST(
       makePostRequest({

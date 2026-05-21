@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +10,7 @@ import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import {
-  Egg, AlertTriangle, Package, Heart, DollarSign,
+  Egg, AlertTriangle, Package, DollarSign,
   ChevronDown, ChevronUp, Save, Calendar,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -22,13 +22,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { RecentRecordsTable } from "@/components/saisie/RecentRecordsTable";
-import { canWrite, formatNumber } from "@/lib/utils";
+import {
+  calculateMortalityFromLivingHens,
+  canWrite,
+  formatNumber,
+} from "@/lib/utils";
 
 const saisieSchema = z.object({
   recordDate: z.string().min(1, "La date est requise"),
   eggsCollected: z.coerce.number().min(0, "Valeur invalide").default(0),
   eggsBroken: z.coerce.number().min(0, "Valeur invalide").default(0),
   mortalityCount: z.coerce.number().min(0, "Valeur invalide").default(0),
+  livingHensCount: z.coerce.number().min(0, "Valeur invalide").default(0),
   mortalityCause: z.string().optional(),
   feedQuantityKg: z.coerce.number().min(0).default(0),
   feedType: z.enum(["demarrage", "croissance", "ponte"]).optional(),
@@ -96,7 +101,6 @@ export default function SaisiePage() {
 
   const readonly = !canWrite(session?.user?.role);
 
-  // SWR remplace les useEffect + fetch manuels
   const { data: buildingInfo, mutate: mutateBuildingInfo } = useSWR<BuildingInfo>(
     INFO_KEY,
     fetcher,
@@ -125,6 +129,7 @@ export default function SaisiePage() {
       eggsCollected: 0,
       eggsBroken: 0,
       mortalityCount: 0,
+      livingHensCount: 0,
       feedQuantityKg: 0,
       feedCost: 0,
     },
@@ -151,25 +156,37 @@ export default function SaisiePage() {
     setValue("expenseLabel", rec.linkedExpenseLabel ?? "");
     setValue("expenseAmount", Number(rec.linkedExpenseAmount ?? 0) || 0);
     setValue("expenseCategory", rec.linkedExpenseCategory ?? undefined);
-    setOpenSections(["oeufs", "troupeau", "alimentation"]);
+    setOpenSections(["oeufs", "troupeau", "alimentation", "depenses"]);
     window.scrollTo({ top: 0, behavior: "smooth" });
     toast.info(`Édition du ${format(new Date(rec.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })}`);
   };
 
   const currentMortalityValue = Number(watch("mortalityCount") ?? 0);
+  const currentLivingHensValue = Number(watch("livingHensCount") ?? 0);
   const currentFeedType = watch("feedType");
   const currentExpenseCategory = watch("expenseCategory");
-  const adjustedTotalMortality = useMemo(() => {
+  const previousMortality = editingRecord?.mortalityCount ?? 0;
+  const effectifAvantSaisie = useMemo(() => {
     if (!buildingInfo) return 0;
-
-    const previousMortality = editingRecord?.mortalityCount ?? 0;
-    return Math.max(0, buildingInfo.totalMortality - previousMortality + currentMortalityValue);
-  }, [buildingInfo, currentMortalityValue, editingRecord?.mortalityCount]);
+    return Math.max(0, buildingInfo.initialCount - (buildingInfo.totalMortality - previousMortality));
+  }, [buildingInfo, previousMortality]);
 
   const projectedEffectif = useMemo(() => {
-    if (!buildingInfo) return 0;
-    return Math.max(0, buildingInfo.initialCount - adjustedTotalMortality);
-  }, [adjustedTotalMortality, buildingInfo]);
+    return Math.max(0, effectifAvantSaisie - currentMortalityValue);
+  }, [currentMortalityValue, effectifAvantSaisie]);
+
+  useEffect(() => {
+    setValue("livingHensCount", projectedEffectif, { shouldDirty: false });
+  }, [projectedEffectif, setValue]);
+
+  const handleLivingHensChange = (value: string) => {
+    const parsedValue = Number(value);
+    const safeValue = Number.isFinite(parsedValue) ? parsedValue : 0;
+    const nextMortality = calculateMortalityFromLivingHens(effectifAvantSaisie, safeValue);
+
+    setValue("livingHensCount", Math.max(0, safeValue), { shouldDirty: true });
+    setValue("mortalityCount", nextMortality, { shouldDirty: true, shouldValidate: true });
+  };
 
   const handleDelete = async (id: number) => {
     setIsDeleting(true);
@@ -223,8 +240,12 @@ export default function SaisiePage() {
 
       reset({
         recordDate: format(new Date(), "yyyy-MM-dd"),
-        eggsCollected: 0, eggsBroken: 0, mortalityCount: 0,
-        feedQuantityKg: 0, feedCost: 0,
+        eggsCollected: 0,
+        eggsBroken: 0,
+        mortalityCount: 0,
+        livingHensCount: buildingInfo.effectifVivant,
+        feedQuantityKg: 0,
+        feedCost: 0,
         feedType: undefined,
         expenseLabel: "",
         expenseAmount: 0,
@@ -280,7 +301,7 @@ export default function SaisiePage() {
               </div>
               <div className="rounded-lg bg-white/80 px-3 py-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">
-                  {editingRecord ? "Effectif apres modification" : "Effectif apres cette saisie"}
+                  {editingRecord ? "Effectif après modification" : "Effectif après cette saisie"}
                 </p>
                 <p className="mt-1 text-lg font-semibold text-amber-700">
                   {formatNumber(projectedEffectif)}
@@ -290,14 +311,13 @@ export default function SaisiePage() {
             {editingRecord && (
               <p className="mt-3 text-xs text-slate-600">
                 Modification du {format(new Date(editingRecord.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })} :
-                l&apos;effectif projete tient compte de l&apos;ancienne mortalite deja enregistree.
+                l&apos;effectif projeté tient compte de l&apos;ancienne mortalité déjà enregistrée.
               </p>
             )}
           </div>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Date */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <div className="space-y-1.5">
               <Label htmlFor="recordDate" required>Date de saisie</Label>
@@ -311,7 +331,6 @@ export default function SaisiePage() {
             </div>
           </div>
 
-          {/* Sections accordéon */}
           {sections.map((section) => {
             const Icon = section.icon;
             const isOpen = openSections.includes(section.id);
@@ -344,13 +363,26 @@ export default function SaisiePage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label htmlFor="eggsCollected" required>Oeufs récoltés</Label>
-                          <Input id="eggsCollected" type="number" min="0" placeholder="0"
-                            {...register("eggsCollected")} error={errors.eggsCollected?.message} disabled={readonly} />
+                          <Input
+                            id="eggsCollected"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            {...register("eggsCollected")}
+                            error={errors.eggsCollected?.message}
+                            disabled={readonly}
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="eggsBroken">Oeufs cassés</Label>
-                          <Input id="eggsBroken" type="number" min="0" placeholder="0"
-                            {...register("eggsBroken")} disabled={readonly} />
+                          <Input
+                            id="eggsBroken"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            {...register("eggsBroken")}
+                            disabled={readonly}
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <Label>Plaquettes (auto)</Label>
@@ -366,15 +398,42 @@ export default function SaisiePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label htmlFor="mortalityCount">Mortalité du jour</Label>
-                            <Input id="mortalityCount" type="number" min="0" placeholder="0"
-                              {...register("mortalityCount")} disabled={readonly} />
+                            <Input
+                              id="mortalityCount"
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              {...register("mortalityCount")}
+                              disabled={readonly}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="livingHensCount">Poules vivantes après saisie</Label>
+                            <Input
+                              id="livingHensCount"
+                              type="number"
+                              min="0"
+                              max={effectifAvantSaisie}
+                              placeholder="0"
+                              value={currentLivingHensValue}
+                              onChange={(event) => handleLivingHensChange(event.target.value)}
+                              disabled={readonly || !buildingInfo}
+                              className="border-amber-200 bg-amber-50/60 focus:border-amber-500 focus:ring-amber-500/20"
+                            />
+                            <p className="text-xs text-slate-500">
+                              Base avant saisie : {formatNumber(effectifAvantSaisie)} poules. La mortalité du jour est recalculée automatiquement.
+                            </p>
                           </div>
                         </div>
                         {(watch("mortalityCount") ?? 0) > 0 && (
                           <div className="space-y-1.5">
                             <Label htmlFor="mortalityCause">Cause de la mortalité</Label>
-                            <Textarea id="mortalityCause" placeholder="Maladie, accident, cause inconnue..."
-                              {...register("mortalityCause")} disabled={readonly} />
+                            <Textarea
+                              id="mortalityCause"
+                              placeholder="Maladie, accident, cause inconnue..."
+                              {...register("mortalityCause")}
+                              disabled={readonly}
+                            />
                           </div>
                         )}
                       </div>
@@ -384,14 +443,21 @@ export default function SaisiePage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label htmlFor="feedQuantityKg">Quantité (kg)</Label>
-                          <Input id="feedQuantityKg" type="number" min="0" step="0.1" placeholder="0"
-                            {...register("feedQuantityKg")} disabled={readonly} />
+                          <Input
+                            id="feedQuantityKg"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="0"
+                            {...register("feedQuantityKg")}
+                            disabled={readonly}
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <Label>Type d&apos;aliment</Label>
                           <Select
                             value={currentFeedType}
-                            onValueChange={(v) => setValue("feedType", v as "demarrage" | "croissance" | "ponte")}
+                            onValueChange={(value) => setValue("feedType", value as "demarrage" | "croissance" | "ponte")}
                             disabled={readonly}
                           >
                             <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
@@ -404,8 +470,14 @@ export default function SaisiePage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="feedCost">Coût (XOF)</Label>
-                          <Input id="feedCost" type="number" min="0" placeholder="0"
-                            {...register("feedCost")} disabled={readonly} />
+                          <Input
+                            id="feedCost"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            {...register("feedCost")}
+                            disabled={readonly}
+                          />
                         </div>
                       </div>
                     )}
@@ -418,20 +490,34 @@ export default function SaisiePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label htmlFor="expenseLabel">Libellé</Label>
-                            <Input id="expenseLabel" type="text" placeholder="Ex: Achat médicaments..."
-                              {...register("expenseLabel")} disabled={readonly} />
+                            <Input
+                              id="expenseLabel"
+                              type="text"
+                              placeholder="Ex: Achat médicaments..."
+                              {...register("expenseLabel")}
+                              disabled={readonly}
+                            />
+                            <p className="text-xs text-slate-500">
+                              Si vous laissez ce champ vide, un libellé automatique sera utilisé selon la catégorie.
+                            </p>
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor="expenseAmount">Montant (XOF)</Label>
-                            <Input id="expenseAmount" type="number" min="0" placeholder="0"
-                              {...register("expenseAmount")} disabled={readonly} />
+                            <Input
+                              id="expenseAmount"
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              {...register("expenseAmount")}
+                              disabled={readonly}
+                            />
                           </div>
                         </div>
                         <div className="space-y-1.5">
                           <Label>Catégorie</Label>
                           <Select
                             value={currentExpenseCategory}
-                            onValueChange={(v) => setValue("expenseCategory", v as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")}
+                            onValueChange={(value) => setValue("expenseCategory", value as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")}
                             disabled={readonly}
                           >
                             <SelectTrigger><SelectValue placeholder="Choisir une catégorie..." /></SelectTrigger>
@@ -475,4 +561,3 @@ export default function SaisiePage() {
     </div>
   );
 }
-

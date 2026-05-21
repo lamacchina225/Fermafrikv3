@@ -4,6 +4,7 @@ import { dailyRecords, expenses, sales } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { AUTO_FEED_EXPENSE_LABEL } from "@/lib/utils";
 
 interface ReportParams {
   farmId: number;
@@ -84,6 +85,17 @@ export async function handleReport(params: ReportParams) {
     }),
   ]);
 
+  const autoFeedExpenseDates = new Set(
+    filteredExpenses
+      .filter((expense) => expense.label === AUTO_FEED_EXPENSE_LABEL && expense.category === "alimentation")
+      .map((expense) => expense.expenseDate)
+  );
+
+  const unresolvedFeedCostTotal = records.reduce((sum, record) => {
+    if (autoFeedExpenseDates.has(record.recordDate)) return sum;
+    return sum + Number(record.feedCost ?? 0);
+  }, 0);
+
   // Revenus vs dépenses par mois
   const monthMap: Record<string, { revenus: number; depenses: number }> = {};
   filteredSales.forEach((s) => {
@@ -97,6 +109,7 @@ export async function handleReport(params: ReportParams) {
     monthMap[mois].depenses += Number(e.amount);
   });
   records.forEach((r) => {
+    if (autoFeedExpenseDates.has(r.recordDate)) return;
     const mois = format(new Date(r.recordDate), "MMM yy", { locale: fr });
     if (!monthMap[mois]) monthMap[mois] = { revenus: 0, depenses: 0 };
     monthMap[mois].depenses += Number(r.feedCost ?? 0);
@@ -113,8 +126,9 @@ export async function handleReport(params: ReportParams) {
   filteredExpenses.forEach((e) => {
     catMap[e.category] = (catMap[e.category] ?? 0) + Number(e.amount);
   });
-  const feedTotal = records.reduce((s, r) => s + Number(r.feedCost ?? 0), 0);
-  if (feedTotal > 0) catMap["alimentation"] = (catMap["alimentation"] ?? 0) + feedTotal;
+  if (unresolvedFeedCostTotal > 0) {
+    catMap["alimentation"] = (catMap["alimentation"] ?? 0) + unresolvedFeedCostTotal;
+  }
   const expensesByCategory = Object.entries(catMap)
     .map(([category, total]) => ({ category, total }))
     .sort((a, b) => b.total - a.total);
@@ -123,7 +137,7 @@ export async function handleReport(params: ReportParams) {
   const totalRevenue = filteredSales.reduce((s, v) => s + Number(v.totalAmount), 0);
   const totalExpenses =
     filteredExpenses.reduce((s, e) => s + Number(e.amount), 0) +
-    records.reduce((s, r) => s + Number(r.feedCost ?? 0), 0);
+    unresolvedFeedCostTotal;
 
   const totalEggs = records.reduce((s, r) => s + r.eggsCollected, 0);
   const totalTrays = filteredSales.reduce((s, v) => s + v.traysSold, 0);
@@ -151,37 +165,73 @@ export async function handleReport(params: ReportParams) {
     client: s.buyerName ?? "",
   }));
 
-  const rawExpenses = filteredExpenses.map((e) => ({
-    date: e.expenseDate,
-    type: "depense",
-    libelle: e.label,
-    categorie: e.category,
-    montant_xof: Number(e.amount),
-  }));
+  const fallbackFeedExpenses = records
+    .filter((record) => !autoFeedExpenseDates.has(record.recordDate) && Number(record.feedCost ?? 0) > 0)
+    .map((record) => ({
+      date: record.recordDate,
+      type: "depense",
+      libelle: AUTO_FEED_EXPENSE_LABEL,
+      categorie: "alimentation",
+      montant_xof: Number(record.feedCost),
+    }));
 
-  const rawEntries = [
-    ...records.map((r) => ({
-      id: `prod-${r.id}`,
-      entryType: "production" as const,
-      date: r.recordDate,
-      label: "Saisie journaliere",
-      details: [
-        `${r.eggsCollected} oeufs recoltes`,
+  const rawExpenses = [
+    ...filteredExpenses.map((e) => ({
+      date: e.expenseDate,
+      type: "depense",
+      libelle: e.label,
+      categorie: e.category,
+      montant_xof: Number(e.amount),
+    })),
+    ...fallbackFeedExpenses,
+  ];
+
+  const fallbackFeedExpenseEntries = records
+    .filter((record) => !autoFeedExpenseDates.has(record.recordDate) && Number(record.feedCost ?? 0) > 0)
+    .map((record) => ({
+      id: `expense-feed-${record.id}`,
+      entryType: "expense" as const,
+      date: record.recordDate,
+      label: AUTO_FEED_EXPENSE_LABEL,
+      details:
+        Number(record.feedQuantityKg ?? 0) > 0
+          ? `${Number(record.feedQuantityKg ?? 0)} kg aliment`
+          : "alimentation",
+      amountXof: Number(record.feedCost),
+      category: "alimentation",
+    }));
+
+  const productionEntries = records
+    .map((r) => {
+      const productionDetails = [
+        r.eggsCollected > 0 ? `${r.eggsCollected} oeufs recoltes` : null,
         r.eggsBroken > 0 ? `${r.eggsBroken} casses` : null,
         r.mortalityCount > 0 ? `${r.mortalityCount} mortalite` : null,
-        Number(r.feedQuantityKg ?? 0) > 0
+        Number(r.feedQuantityKg ?? 0) > 0 && Number(r.feedCost ?? 0) <= 0
           ? `${Number(r.feedQuantityKg ?? 0)} kg aliment`
           : null,
-      ]
-        .filter(Boolean)
-        .join(" | "),
-      eggsCollected: r.eggsCollected,
-      eggsBroken: r.eggsBroken,
-      mortalityCount: r.mortalityCount,
-      feedQuantityKg: Number(r.feedQuantityKg ?? 0),
-      amountXof: Number(r.feedCost ?? 0),
-      category: "production",
-    })),
+      ].filter(Boolean);
+
+      if (productionDetails.length === 0) return null;
+
+      return {
+        id: `prod-${r.id}`,
+        entryType: "production" as const,
+        date: r.recordDate,
+        label: "Saisie journaliere",
+        details: productionDetails.join(" | "),
+        eggsCollected: r.eggsCollected,
+        eggsBroken: r.eggsBroken,
+        mortalityCount: r.mortalityCount,
+        feedQuantityKg: Number(r.feedQuantityKg ?? 0),
+        amountXof: 0,
+        category: "production",
+      };
+    })
+    .filter((entry) => entry !== null);
+
+  const rawEntries = [
+    ...productionEntries,
     ...filteredSales.map((s) => ({
       id: `sale-${s.id}`,
       entryType: "sale" as const,
@@ -202,6 +252,7 @@ export async function handleReport(params: ReportParams) {
       amountXof: Number(e.amount),
       category: e.category,
     })),
+    ...fallbackFeedExpenseEntries,
   ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 
   return NextResponse.json({

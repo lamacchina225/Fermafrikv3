@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { AlertTriangle, Bell, Egg, Package } from "lucide-react";
+import { AlertTriangle, Bell, Egg } from "lucide-react";
 
 type AlertItem = {
   id: string;
   title: string;
   description: string;
   severity: "warning" | "critical";
-  icon: typeof Package;
+  icon: typeof AlertTriangle;
 };
 
 type DashboardAlertsProps = {
-  stockPlaquettes: number;
   tauxPonteVeille: number;
   yesterdayEggs: number;
   effectifVivant: number;
@@ -24,16 +23,6 @@ const NOTIFICATION_PREFIX = "fermafrik:alert:";
 export function DashboardAlerts(props: DashboardAlertsProps) {
   const alerts = useMemo<AlertItem[]>(() => {
     const nextAlerts: AlertItem[] = [];
-
-    if (props.stockPlaquettes <= 5) {
-      nextAlerts.push({
-        id: "stock-low",
-        title: "Stock d'oeufs bas",
-        description: `Le stock disponible est tombe a ${props.stockPlaquettes} plaquettes.`,
-        severity: props.stockPlaquettes <= 2 ? "critical" : "warning",
-        icon: Package,
-      });
-    }
 
     if (props.tauxPonteVeille > 0 && props.tauxPonteVeille < 55) {
       nextAlerts.push({
@@ -72,7 +61,6 @@ export function DashboardAlerts(props: DashboardAlertsProps) {
     return nextAlerts;
   }, [
     props.effectifVivant,
-    props.stockPlaquettes,
     props.tauxPonteVeille,
     props.totalMortality,
     props.yesterdayEggs,

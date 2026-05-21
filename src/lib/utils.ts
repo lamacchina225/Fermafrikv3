@@ -7,6 +7,8 @@ import { EGGS_PER_TRAY } from "@/lib/constants";
 // ── Réexport des constantes métier ──────────────────────────────────────────
 export { EGGS_PER_TRAY } from "@/lib/constants";
 
+export const AUTO_FEED_EXPENSE_LABEL = "Alimentation quotidienne";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -59,6 +61,19 @@ export function calculateEffectifVivant(
   totalMortality: number
 ): number {
   return Math.max(0, initialCount - totalMortality);
+}
+
+/**
+ * Calcule la mortalité à enregistrer à partir de l'effectif vivant souhaité.
+ * Le résultat est borné pour éviter les valeurs négatives ou supérieures à l'effectif de départ.
+ */
+export function calculateMortalityFromLivingHens(
+  baseLivingHens: number,
+  targetLivingHens: number
+): number {
+  const safeBase = Math.max(0, baseLivingHens);
+  const safeTarget = Math.min(Math.max(0, targetLivingHens), safeBase);
+  return safeBase - safeTarget;
 }
 
 /**
@@ -175,6 +190,28 @@ export function getCategoryLabel(category: string): string {
     autre: "Autre",
   };
   return labels[category] ?? category;
+}
+
+/**
+ * Construit un libellé de dépense lisible à partir de la saisie utilisateur.
+ */
+export function buildExpenseLabel(
+  label: string | null | undefined,
+  category: string | null | undefined
+): string {
+  const trimmedLabel = label?.trim();
+  if (trimmedLabel) return trimmedLabel;
+
+  const defaultLabels: Record<string, string> = {
+    alimentation: "Frais d'alimentation",
+    sante: "Frais de santé",
+    energie: "Frais d'énergie",
+    main_oeuvre: "Frais de main d'oeuvre",
+    equipement: "Frais d'équipement",
+    autre: "Dépense diverse",
+  };
+
+  return defaultLabels[category ?? "autre"] ?? "Dépense diverse";
 }
 
 /**
