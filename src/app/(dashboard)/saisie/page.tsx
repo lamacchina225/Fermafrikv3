@@ -73,10 +73,10 @@ interface BuildingInfo {
 }
 
 const sections = [
-  { id: "oeufs", title: "Oeufs & Récolte", icon: Egg, color: "yellow" },
-  { id: "troupeau", title: "Troupeau & Mortalité", icon: AlertTriangle, color: "red" },
+  { id: "oeufs", title: "Oeufs & Recolte", icon: Egg, color: "yellow" },
+  { id: "troupeau", title: "Troupeau & Mortalite", icon: AlertTriangle, color: "red" },
   { id: "alimentation", title: "Alimentation", icon: Package, color: "blue" },
-  { id: "depenses", title: "Dépenses diverses", icon: DollarSign, color: "green" },
+  { id: "depenses", title: "Depenses diverses", icon: DollarSign, color: "green" },
 ] as const;
 
 const colorMap: Record<string, { bg: string; icon: string; border: string }> = {
@@ -86,10 +86,10 @@ const colorMap: Record<string, { bg: string; icon: string; border: string }> = {
   green: { bg: "bg-green-50", icon: "text-green-600", border: "border-green-200" },
 };
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = (url: string) => fetch(url).then((response) => response.json());
 
 const INFO_KEY = "/api/daily-records?info=true";
-const RECENT_KEY = "/api/daily-records?recent=true";
+const HISTORY_PAGE_SIZE = 30;
 
 export default function SaisiePage() {
   const { data: session, status } = useSession();
@@ -98,6 +98,11 @@ export default function SaisiePage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE);
+  const [searchFromDate, setSearchFromDate] = useState("");
+  const [searchToDate, setSearchToDate] = useState("");
+  const [appliedFromDate, setAppliedFromDate] = useState("");
+  const [appliedToDate, setAppliedToDate] = useState("");
 
   const readonly = !canWrite(session?.user?.role);
 
@@ -107,17 +112,29 @@ export default function SaisiePage() {
     { revalidateOnFocus: false }
   );
 
-  const { data: recentData } = useSWR<{ records: RecentRecord[] }>(
-    RECENT_KEY,
-    fetcher,
-    { revalidateOnFocus: false }
-  );
+  const historyKey = useMemo(() => {
+    const params = new URLSearchParams({
+      activeCycle: "true",
+      limit: historyLimit.toString(),
+      offset: "0",
+    });
+    if (appliedFromDate) params.set("fromDate", appliedFromDate);
+    if (appliedToDate) params.set("toDate", appliedToDate);
+    return `/api/daily-records?${params.toString()}`;
+  }, [appliedFromDate, appliedToDate, historyLimit]);
 
-  const recentRecords = [...(recentData?.records ?? [])].sort((a, b) =>
+  const { data: historyData } = useSWR<{
+    records: RecentRecord[];
+    pagination: { total: number; limit: number; offset: number };
+  }>(historyKey, fetcher, { revalidateOnFocus: false });
+
+  const historyRecords = [...(historyData?.records ?? [])].sort((a, b) =>
     b.recordDate.localeCompare(a.recordDate)
   );
+  const historyTotal = historyData?.pagination.total ?? 0;
+  const hasMoreHistory = historyRecords.length < historyTotal;
 
-  const editingRecord = recentRecords.find((record) => record.id === editingRecordId) ?? null;
+  const editingRecord = historyRecords.find((record) => record.id === editingRecordId) ?? null;
 
   const {
     register, handleSubmit, setValue, watch, reset,
@@ -136,29 +153,29 @@ export default function SaisiePage() {
   });
 
   const toggleSection = (sectionId: string) => {
-    setOpenSections((prev) =>
-      prev.includes(sectionId)
-        ? prev.filter((s) => s !== sectionId)
-        : [...prev, sectionId]
+    setOpenSections((previous) =>
+      previous.includes(sectionId)
+        ? previous.filter((section) => section !== sectionId)
+        : [...previous, sectionId]
     );
   };
 
-  const handleEditSetup = (rec: RecentRecord) => {
-    setEditingRecordId(rec.id);
-    setValue("recordDate", rec.recordDate);
-    setValue("eggsCollected", rec.eggsCollected);
-    setValue("eggsBroken", rec.eggsBroken);
-    setValue("mortalityCount", rec.mortalityCount);
-    setValue("mortalityCause", rec.mortalityCause ?? "");
-    setValue("feedQuantityKg", Number(rec.feedQuantityKg ?? 0));
-    setValue("feedType", (rec.feedType as "demarrage" | "croissance" | "ponte" | undefined) ?? undefined);
-    setValue("feedCost", Number(rec.feedCost ?? 0));
-    setValue("expenseLabel", rec.linkedExpenseLabel ?? "");
-    setValue("expenseAmount", Number(rec.linkedExpenseAmount ?? 0) || 0);
-    setValue("expenseCategory", rec.linkedExpenseCategory ?? undefined);
+  const handleEditSetup = (record: RecentRecord) => {
+    setEditingRecordId(record.id);
+    setValue("recordDate", record.recordDate);
+    setValue("eggsCollected", record.eggsCollected);
+    setValue("eggsBroken", record.eggsBroken);
+    setValue("mortalityCount", record.mortalityCount);
+    setValue("mortalityCause", record.mortalityCause ?? "");
+    setValue("feedQuantityKg", Number(record.feedQuantityKg ?? 0));
+    setValue("feedType", (record.feedType as "demarrage" | "croissance" | "ponte" | undefined) ?? undefined);
+    setValue("feedCost", Number(record.feedCost ?? 0));
+    setValue("expenseLabel", record.linkedExpenseLabel ?? "");
+    setValue("expenseAmount", Number(record.linkedExpenseAmount ?? 0) || 0);
+    setValue("expenseCategory", record.linkedExpenseCategory ?? undefined);
     setOpenSections(["oeufs", "troupeau", "alimentation", "depenses"]);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    toast.info(`Édition du ${format(new Date(rec.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })}`);
+    toast.info(`Edition du ${format(new Date(`${record.recordDate}T00:00:00`), "d MMMM yyyy", { locale: fr })}`);
   };
 
   const currentMortalityValue = Number(watch("mortalityCount") ?? 0);
@@ -166,6 +183,7 @@ export default function SaisiePage() {
   const currentFeedType = watch("feedType");
   const currentExpenseCategory = watch("expenseCategory");
   const previousMortality = editingRecord?.mortalityCount ?? 0;
+
   const effectifAvantSaisie = useMemo(() => {
     if (!buildingInfo) return 0;
     return Math.max(0, buildingInfo.initialCount - (buildingInfo.totalMortality - previousMortality));
@@ -188,15 +206,19 @@ export default function SaisiePage() {
     setValue("mortalityCount", nextMortality, { shouldDirty: true, shouldValidate: true });
   };
 
+  const refreshHistory = () => {
+    mutate(historyKey);
+  };
+
   const handleDelete = async (id: number) => {
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/daily-records/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Erreur lors de la suppression");
-      toast.success("Saisie supprimée");
+      const response = await fetch(`/api/daily-records/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Erreur lors de la suppression");
+      toast.success("Saisie supprimee");
       setDeleteConfirmId(null);
       setEditingRecordId((current) => (current === id ? null : current));
-      mutate(RECENT_KEY);
+      refreshHistory();
       mutateBuildingInfo();
     } catch {
       toast.error("Erreur lors de la suppression");
@@ -206,8 +228,14 @@ export default function SaisiePage() {
   };
 
   const onSubmit = async (data: SaisieFormData) => {
-    if (readonly) { toast.error("Mode démo : lecture seule"); return; }
-    if (!buildingInfo) { toast.error("Aucun bâtiment actif trouvé"); return; }
+    if (readonly) {
+      toast.error("Mode demo : lecture seule");
+      return;
+    }
+    if (!buildingInfo) {
+      toast.error("Aucun batiment actif trouve");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -231,12 +259,12 @@ export default function SaisiePage() {
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error ?? "Erreur lors de la sauvegarde");
+        const error = await response.json();
+        throw new Error(error.error ?? "Erreur lors de la sauvegarde");
       }
 
       const result = await response.json();
-      toast.success(result.updated ? "Saisie mise à jour !" : "Saisie enregistrée !");
+      toast.success(result.updated ? "Saisie mise a jour !" : "Saisie enregistree !");
 
       reset({
         recordDate: format(new Date(), "yyyy-MM-dd"),
@@ -253,13 +281,27 @@ export default function SaisiePage() {
       });
       setEditingRecordId(null);
       setOpenSections(["oeufs"]);
-      mutate(RECENT_KEY);
+      refreshHistory();
       mutateBuildingInfo();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const applyHistoryFilters = () => {
+    setHistoryLimit(HISTORY_PAGE_SIZE);
+    setAppliedFromDate(searchFromDate);
+    setAppliedToDate(searchToDate);
+  };
+
+  const clearHistoryFilters = () => {
+    setSearchFromDate("");
+    setSearchToDate("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
+    setHistoryLimit(HISTORY_PAGE_SIZE);
   };
 
   return (
@@ -269,11 +311,12 @@ export default function SaisiePage() {
         username={session?.user?.name ?? undefined}
         userRole={session?.user?.role}
       />
+
       <div className="p-6 max-w-3xl mx-auto">
         {readonly && status === "authenticated" && (
           <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl">
             <p className="text-orange-700 text-sm font-medium">
-              Mode démo : consultation uniquement. Aucune modification possible.
+              Mode demo : consultation uniquement. Aucune modification possible.
             </p>
           </div>
         )}
@@ -286,6 +329,7 @@ export default function SaisiePage() {
                 {buildingInfo.buildingName}
               </span>
             </div>
+
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-white/80 px-3 py-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Effectif initial</p>
@@ -301,17 +345,18 @@ export default function SaisiePage() {
               </div>
               <div className="rounded-lg bg-white/80 px-3 py-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">
-                  {editingRecord ? "Effectif après modification" : "Effectif après cette saisie"}
+                  {editingRecord ? "Effectif apres modification" : "Effectif apres cette saisie"}
                 </p>
                 <p className="mt-1 text-lg font-semibold text-amber-700">
                   {formatNumber(projectedEffectif)}
                 </p>
               </div>
             </div>
+
             {editingRecord && (
               <p className="mt-3 text-xs text-slate-600">
-                Modification du {format(new Date(editingRecord.recordDate + "T00:00:00"), "d MMMM yyyy", { locale: fr })} :
-                l&apos;effectif projeté tient compte de l&apos;ancienne mortalité déjà enregistrée.
+                Modification du {format(new Date(`${editingRecord.recordDate}T00:00:00`), "d MMMM yyyy", { locale: fr })} :
+                l&apos;effectif projete tient compte de l&apos;ancienne mortalite deja enregistree.
               </p>
             )}
           </div>
@@ -362,7 +407,7 @@ export default function SaisiePage() {
                     {section.id === "oeufs" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="eggsCollected" required>Oeufs récoltés</Label>
+                          <Label htmlFor="eggsCollected" required>Oeufs recoltes</Label>
                           <Input
                             id="eggsCollected"
                             type="number"
@@ -374,7 +419,7 @@ export default function SaisiePage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="eggsBroken">Oeufs cassés</Label>
+                          <Label htmlFor="eggsBroken">Oeufs casses</Label>
                           <Input
                             id="eggsBroken"
                             type="number"
@@ -397,7 +442,7 @@ export default function SaisiePage() {
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label htmlFor="mortalityCount">Mortalité du jour</Label>
+                            <Label htmlFor="mortalityCount">Mortalite du jour</Label>
                             <Input
                               id="mortalityCount"
                               type="number"
@@ -408,7 +453,7 @@ export default function SaisiePage() {
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="livingHensCount">Poules vivantes après saisie</Label>
+                            <Label htmlFor="livingHensCount">Poules vivantes apres saisie</Label>
                             <Input
                               id="livingHensCount"
                               type="number"
@@ -421,13 +466,13 @@ export default function SaisiePage() {
                               className="border-amber-200 bg-amber-50/60 focus:border-amber-500 focus:ring-amber-500/20"
                             />
                             <p className="text-xs text-slate-500">
-                              Base avant saisie : {formatNumber(effectifAvantSaisie)} poules. La mortalité du jour est recalculée automatiquement.
+                              Base avant saisie : {formatNumber(effectifAvantSaisie)} poules. La mortalite du jour est recalculee automatiquement.
                             </p>
                           </div>
                         </div>
                         {(watch("mortalityCount") ?? 0) > 0 && (
                           <div className="space-y-1.5">
-                            <Label htmlFor="mortalityCause">Cause de la mortalité</Label>
+                            <Label htmlFor="mortalityCause">Cause de la mortalite</Label>
                             <Textarea
                               id="mortalityCause"
                               placeholder="Maladie, accident, cause inconnue..."
@@ -442,7 +487,7 @@ export default function SaisiePage() {
                     {section.id === "alimentation" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="feedQuantityKg">Quantité (kg)</Label>
+                          <Label htmlFor="feedQuantityKg">Quantite (kg)</Label>
                           <Input
                             id="feedQuantityKg"
                             type="number"
@@ -462,14 +507,14 @@ export default function SaisiePage() {
                           >
                             <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="demarrage">Démarrage</SelectItem>
+                              <SelectItem value="demarrage">Demarrage</SelectItem>
                               <SelectItem value="croissance">Croissance</SelectItem>
                               <SelectItem value="ponte">Ponte</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="feedCost">Coût (XOF)</Label>
+                          <Label htmlFor="feedCost">Cout (XOF)</Label>
                           <Input
                             id="feedCost"
                             type="number"
@@ -485,20 +530,20 @@ export default function SaisiePage() {
                     {section.id === "depenses" && (
                       <div className="space-y-4">
                         <p className="text-xs text-gray-500">
-                          Enregistrez une dépense supplémentaire pour cette journée (facultatif)
+                          Enregistrez une depense supplementaire pour cette journee (facultatif)
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label htmlFor="expenseLabel">Libellé</Label>
+                            <Label htmlFor="expenseLabel">Libelle</Label>
                             <Input
                               id="expenseLabel"
                               type="text"
-                              placeholder="Ex: Achat médicaments..."
+                              placeholder="Ex: Achat medicaments..."
                               {...register("expenseLabel")}
                               disabled={readonly}
                             />
                             <p className="text-xs text-slate-500">
-                              Si vous laissez ce champ vide, un libellé automatique sera utilisé selon la catégorie.
+                              Si vous laissez ce champ vide, un libelle automatique sera utilise selon la categorie.
                             </p>
                           </div>
                           <div className="space-y-1.5">
@@ -514,19 +559,19 @@ export default function SaisiePage() {
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <Label>Catégorie</Label>
+                          <Label>Categorie</Label>
                           <Select
                             value={currentExpenseCategory}
                             onValueChange={(value) => setValue("expenseCategory", value as "alimentation" | "sante" | "energie" | "main_oeuvre" | "equipement" | "autre")}
                             disabled={readonly}
                           >
-                            <SelectTrigger><SelectValue placeholder="Choisir une catégorie..." /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Choisir une categorie..." /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="alimentation">Alimentation</SelectItem>
-                              <SelectItem value="sante">Santé</SelectItem>
-                              <SelectItem value="energie">Énergie</SelectItem>
+                              <SelectItem value="sante">Sante</SelectItem>
+                              <SelectItem value="energie">Energie</SelectItem>
                               <SelectItem value="main_oeuvre">Main d&apos;oeuvre</SelectItem>
-                              <SelectItem value="equipement">Équipement</SelectItem>
+                              <SelectItem value="equipement">Equipement</SelectItem>
                               <SelectItem value="autre">Autre</SelectItem>
                             </SelectContent>
                           </Select>
@@ -547,8 +592,41 @@ export default function SaisiePage() {
           )}
         </form>
 
+        <div className="mt-8 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="historyFromDate">Du</Label>
+              <Input
+                id="historyFromDate"
+                type="date"
+                value={searchFromDate}
+                onChange={(event) => setSearchFromDate(event.target.value)}
+              />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="historyToDate">Au</Label>
+              <Input
+                id="historyToDate"
+                type="date"
+                value={searchToDate}
+                onChange={(event) => setSearchToDate(event.target.value)}
+              />
+            </div>
+            <Button type="button" onClick={applyHistoryFilters} className="sm:w-auto">
+              Rechercher
+            </Button>
+            {(appliedFromDate || appliedToDate || searchFromDate || searchToDate) && (
+              <Button type="button" variant="outline" onClick={clearHistoryFilters} className="sm:w-auto">
+                Reinitialiser
+              </Button>
+            )}
+          </div>
+        </div>
+
         <RecentRecordsTable
-          records={recentRecords}
+          records={historyRecords}
+          total={historyTotal}
+          hasMore={hasMoreHistory}
           readonly={readonly}
           deleteConfirmId={deleteConfirmId}
           isDeleting={isDeleting}
@@ -556,6 +634,7 @@ export default function SaisiePage() {
           onDeleteRequest={setDeleteConfirmId}
           onDeleteConfirm={handleDelete}
           onDeleteCancel={() => setDeleteConfirmId(null)}
+          onLoadMore={() => setHistoryLimit((current) => current + HISTORY_PAGE_SIZE)}
         />
       </div>
     </div>

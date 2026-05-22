@@ -1,20 +1,17 @@
 /**
  * Handlers pour GET /api/daily-records
- * Fichier extracte pour éviter un fichier route.ts trop volumineux (>300 lignes)
+ * Fichier extrait pour eviter un fichier route.ts trop volumineux (>300 lignes)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { dailyRecords, buildings, cycles, expenses } from "@/db/schema";
-import { eq, desc, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, inArray, gte, lte } from "drizzle-orm";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { type AuthContext } from "@/lib/api-auth";
 import { DEFAULT_PAGINATION_LIMIT, MAX_PAGINATION_LIMIT } from "@/lib/constants";
 import { handleReport } from "./report";
 import { parseDailyRecordExpenseLabel } from "@/lib/daily-record-linked-expense";
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function getActiveBuilding(farmId: number) {
   return db.query.buildings.findFirst({
@@ -37,28 +34,24 @@ async function getCycleMortality(farmId: number, cycleId: number) {
   return Number(agg?.total ?? 0);
 }
 
-// ─── GET: sous-handlers par mode ────────────────────────────────────────────
-
-export async function handleRecent(farmId: number) {
-  const building = await getActiveBuilding(farmId);
-  if (!building) return NextResponse.json({ records: [] });
-  const cycle = await getActiveCycle(farmId, building.id);
-  if (!cycle) return NextResponse.json({ records: [] });
-  const records = await db.query.dailyRecords.findMany({
-    where: and(eq(dailyRecords.farmId, farmId), eq(dailyRecords.cycleId, cycle.id)),
-    orderBy: [desc(dailyRecords.recordDate)],
-    limit: 14,
-  });
-
+async function enrichRecordsWithLinkedExpenses(
+  farmId: number,
+  records: Array<typeof dailyRecords.$inferSelect>
+) {
   if (records.length === 0) {
-    return NextResponse.json({ records });
+    return records.map((record) => ({
+      ...record,
+      linkedExpenseId: null,
+      linkedExpenseLabel: null,
+      linkedExpenseAmount: null,
+      linkedExpenseCategory: null,
+    }));
   }
 
   const recordDates = [...new Set(records.map((record) => record.recordDate))];
   const linkedExpenses = await db.query.expenses.findMany({
     where: and(
       eq(expenses.farmId, farmId),
-      eq(expenses.cycleId, cycle.id),
       inArray(expenses.expenseDate, recordDates)
     ),
     orderBy: [desc(expenses.createdAt)],
@@ -85,17 +78,33 @@ export async function handleRecent(farmId: number) {
 
   const expenseByRecordId = new Map(expenseEntries);
 
+  return records.map((record) => {
+    const linkedExpense = expenseByRecordId.get(record.id);
+    return {
+      ...record,
+      linkedExpenseId: linkedExpense?.id ?? null,
+      linkedExpenseLabel: linkedExpense?.label ?? null,
+      linkedExpenseAmount: linkedExpense?.amount ?? null,
+      linkedExpenseCategory: linkedExpense?.category ?? null,
+    };
+  });
+}
+
+export async function handleRecent(farmId: number) {
+  const building = await getActiveBuilding(farmId);
+  if (!building) return NextResponse.json({ records: [] });
+
+  const cycle = await getActiveCycle(farmId, building.id);
+  if (!cycle) return NextResponse.json({ records: [] });
+
+  const records = await db.query.dailyRecords.findMany({
+    where: and(eq(dailyRecords.farmId, farmId), eq(dailyRecords.cycleId, cycle.id)),
+    orderBy: [desc(dailyRecords.recordDate)],
+    limit: 14,
+  });
+
   return NextResponse.json({
-    records: records.map((record) => {
-      const linkedExpense = expenseByRecordId.get(record.id);
-      return {
-        ...record,
-        linkedExpenseId: linkedExpense?.id ?? null,
-        linkedExpenseLabel: linkedExpense?.label ?? null,
-        linkedExpenseAmount: linkedExpense?.amount ?? null,
-        linkedExpenseCategory: linkedExpense?.category ?? null,
-      };
-    }),
+    records: await enrichRecordsWithLinkedExpenses(farmId, records),
   });
 }
 
@@ -106,7 +115,8 @@ export async function handleMonthly(
   endDateParam: string | null
 ) {
   const building = await getActiveBuilding(farmId);
-  if (!building) return NextResponse.json({ error: "Aucun bâtiment actif" }, { status: 404 });
+  if (!building) return NextResponse.json({ error: "Aucun batiment actif" }, { status: 404 });
+
   const cycle = await getActiveCycle(farmId, building.id);
   if (!cycle) return NextResponse.json({ error: "Aucun cycle actif" }, { status: 404 });
 
@@ -126,24 +136,27 @@ export async function handleMonthly(
     orderBy: [dailyRecords.recordDate],
   });
 
-  const totalEggs = monthRecords.reduce((s, r) => s + r.eggsCollected, 0);
-  const totalBroken = monthRecords.reduce((s, r) => s + r.eggsBroken, 0);
+  const totalEggs = monthRecords.reduce((sum, record) => sum + record.eggsCollected, 0);
+  const totalBroken = monthRecords.reduce((sum, record) => sum + record.eggsBroken, 0);
   const joursSaisis = monthRecords.length;
   const avgTauxPonte =
     joursSaisis > 0 && effectifVivant > 0
       ? Math.round(
-          (monthRecords.reduce((s, r) => s + (r.eggsCollected / effectifVivant) * 100, 0) /
-            joursSaisis) *
-            10
+          (
+            monthRecords.reduce(
+              (sum, record) => sum + (record.eggsCollected / effectifVivant) * 100,
+              0
+            ) / joursSaisis
+          ) * 10
         ) / 10
       : 0;
 
-  const records = monthRecords.map((r) => ({
-    date: format(new Date(r.recordDate + "T00:00:00"), "dd/MM", { locale: fr }),
-    oeufs: r.eggsCollected,
+  const records = monthRecords.map((record) => ({
+    date: format(new Date(`${record.recordDate}T00:00:00`), "dd/MM", { locale: fr }),
+    oeufs: record.eggsCollected,
     tauxPonte:
       effectifVivant > 0
-        ? Math.round((r.eggsCollected / effectifVivant) * 100 * 10) / 10
+        ? Math.round((record.eggsCollected / effectifVivant) * 100 * 10) / 10
         : 0,
   }));
 
@@ -152,9 +165,11 @@ export async function handleMonthly(
 
 export async function handleInfo(farmId: number) {
   const building = await getActiveBuilding(farmId);
-  if (!building) return NextResponse.json({ error: "Aucun bâtiment actif" }, { status: 404 });
+  if (!building) return NextResponse.json({ error: "Aucun batiment actif" }, { status: 404 });
+
   const cycle = await getActiveCycle(farmId, building.id);
   if (!cycle) return NextResponse.json({ error: "Aucun cycle actif" }, { status: 404 });
+
   const totalMortality = await getCycleMortality(farmId, cycle.id);
   const effectifVivant = Math.max(0, cycle.initialCount - totalMortality);
 
@@ -171,6 +186,7 @@ export async function handleInfo(farmId: number) {
 export async function handleReportMode(farmId: number, searchParams: URLSearchParams) {
   const building = await getActiveBuilding(farmId);
   if (!building) return NextResponse.json({});
+
   const cycle = await getActiveCycle(farmId, building.id);
   if (!cycle) return NextResponse.json({});
 
@@ -190,23 +206,55 @@ export async function handleReportMode(farmId: number, searchParams: URLSearchPa
 export async function handleList(farmId: number, searchParams: URLSearchParams) {
   const limitParam = searchParams.get("limit");
   const offsetParam = searchParams.get("offset");
-  const limit = Math.min(Math.max(parseInt(limitParam ?? DEFAULT_PAGINATION_LIMIT.toString(), 10) || DEFAULT_PAGINATION_LIMIT, 1), MAX_PAGINATION_LIMIT);
+  const fromDate = searchParams.get("fromDate");
+  const toDate = searchParams.get("toDate");
+  const activeCycleOnly = searchParams.get("activeCycle") === "true";
+
+  const limit = Math.min(
+    Math.max(parseInt(limitParam ?? DEFAULT_PAGINATION_LIMIT.toString(), 10) || DEFAULT_PAGINATION_LIMIT, 1),
+    MAX_PAGINATION_LIMIT
+  );
   const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
 
-  const farmFilter = eq(dailyRecords.farmId, farmId);
+  const filters = [eq(dailyRecords.farmId, farmId)];
+
+  if (activeCycleOnly) {
+    const building = await getActiveBuilding(farmId);
+    if (!building) {
+      return NextResponse.json({
+        records: [],
+        pagination: { limit, offset, total: 0 },
+      });
+    }
+
+    const cycle = await getActiveCycle(farmId, building.id);
+    if (!cycle) {
+      return NextResponse.json({
+        records: [],
+        pagination: { limit, offset, total: 0 },
+      });
+    }
+
+    filters.push(eq(dailyRecords.cycleId, cycle.id));
+  }
+
+  if (fromDate) filters.push(gte(dailyRecords.recordDate, fromDate));
+  if (toDate) filters.push(lte(dailyRecords.recordDate, toDate));
+
+  const whereClause = and(...filters);
 
   const [recordsList, totalCount] = await Promise.all([
     db.query.dailyRecords.findMany({
-      where: farmFilter,
+      where: whereClause,
       orderBy: [desc(dailyRecords.recordDate)],
       limit,
       offset,
     }),
-    db.select({ count: sql<number>`COUNT(*)` }).from(dailyRecords).where(farmFilter),
+    db.select({ count: sql<number>`COUNT(*)` }).from(dailyRecords).where(whereClause),
   ]);
 
   return NextResponse.json({
-    records: recordsList,
+    records: await enrichRecordsWithLinkedExpenses(farmId, recordsList),
     pagination: { limit, offset, total: Number(totalCount[0]?.count ?? 0) },
   });
 }
