@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { useSession } from "next-auth/react";
 import { z } from "zod";
-import { Package, Plus, ShoppingCart, UserPlus, X, CheckCircle2, Phone } from "lucide-react";
+import { AlertTriangle, Package, Plus, ShoppingCart, UserPlus, X, CheckCircle2, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DateNavigator } from "@/components/ventes/DateNavigator";
 import { SalesMetrics } from "@/components/ventes/SalesMetrics";
-import { SalesList } from "@/components/ventes/SalesList";
+import { SalesList, type SaleEditValues } from "@/components/ventes/SalesList";
 import { canWrite, formatXOF, isAdmin, EGGS_PER_TRAY } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -70,6 +70,15 @@ export default function VentesPage() {
   const [withExpense, setWithExpense] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClientSubmitting, setIsClientSubmitting] = useState(false);
+  const [isUpdatingSale, setIsUpdatingSale] = useState(false);
+  const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<SaleEditValues>({
+    saleDate: selectedDate,
+    traysSold: "",
+    unitPrice: "",
+    clientId: "",
+    buyerName: "",
+  });
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -90,14 +99,19 @@ export default function VentesPage() {
   const clients = clientsData?.clients ?? [];
 
   const salesKey = `/api/sales?date=${selectedDate}`;
+  const recentSalesKey = "/api/sales?limit=50";
   const expensesKey = `/api/expenses?date=${selectedDate}`;
 
   const { data: salesData, isLoading: isLoadingSales } = useSWR<{ sales: SaleRow[] }>(
     salesKey, fetcher
   );
+  const { data: recentSalesData, isLoading: isLoadingRecentSales } = useSWR<{ sales: SaleRow[] }>(
+    recentSalesKey, fetcher
+  );
   const { data: expensesData } = useSWR<{ expenses: ExpenseRow[] }>(expensesKey, fetcher);
 
   const salesList = salesData?.sales ?? [];
+  const recentSalesList = (recentSalesData?.sales ?? []).filter((sale) => sale.saleDate !== selectedDate);
   const linkedExpenses = expensesData?.expenses ?? [];
 
   // ─── Computed ────────────────────────────────────────────────────────────
@@ -106,6 +120,7 @@ export default function VentesPage() {
   const totalSalesAmount = salesList.reduce((s, v) => s + Number(v.totalAmount), 0);
   const totalExpensesAmount = linkedExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const netAmount = totalSalesAmount - totalExpensesAmount;
+  const existingSaleForDate = salesList[0] ?? null;
 
   // ─── Forms ───────────────────────────────────────────────────────────────
 
@@ -122,6 +137,11 @@ export default function VentesPage() {
   const unitPrice = watch("unitPrice") || defaultPrice;
   const estimatedTotal = traysSold * unitPrice;
 
+  const describeSale = (sale: SaleRow) => {
+    const buyer = sale.clientName || sale.buyerName || "client non renseigne";
+    return `Il y a deja une vente de ${sale.traysSold} plaquette${sale.traysSold > 1 ? "s" : ""} à ${buyer} le ${sale.saleDate}.`;
+  };
+
   // ─── Handlers ────────────────────────────────────────────────────────────
 
   const resetForm = () => {
@@ -133,12 +153,36 @@ export default function VentesPage() {
   };
 
   const openForm = () => {
+    if (existingSaleForDate) {
+      toast.warning(`${describeSale(existingSaleForDate)} Modifiez la vente existante.`);
+      handleEditStart(existingSaleForDate);
+      return;
+    }
     setShowForm(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
 
+  const revalidateSalesDependents = (dates: string[]) => {
+    for (const date of dates) {
+      mutate(`/api/sales?date=${date}`);
+    }
+    mutate((key) => {
+      if (typeof key !== "string") return false;
+      return (
+        key.startsWith("/api/sales") ||
+        key.startsWith("/api/stocks") ||
+        key.startsWith("/api/daily-records")
+      );
+    });
+  };
+
   const onSubmitSale = async (formData: SaleFormData) => {
     if (readonly || !buildingInfo) return;
+    if (existingSaleForDate) {
+      toast.warning(`${describeSale(existingSaleForDate)} Modifiez la vente existante.`);
+      handleEditStart(existingSaleForDate);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const body: Record<string, unknown> = {
@@ -161,7 +205,7 @@ export default function VentesPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? "Erreur serveur");
       toast.success("Vente enregistrée");
       resetForm();
-      mutate(salesKey);
+      revalidateSalesDependents([selectedDate]);
       mutate(expensesKey);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur");
@@ -194,13 +238,94 @@ export default function VentesPage() {
     }
   };
 
+  const handleEditStart = (sale: SaleRow) => {
+    setDeleteConfirmId(null);
+    setEditingSaleId(sale.id);
+    setEditValues({
+      saleDate: sale.saleDate,
+      traysSold: String(sale.traysSold),
+      unitPrice: String(Number(sale.unitPrice)),
+      clientId: sale.clientId ? String(sale.clientId) : "",
+      buyerName: sale.clientId ? "" : sale.buyerName ?? "",
+    });
+  };
+
+  const handleEditChange = (field: keyof SaleEditValues, value: string) => {
+    setEditValues((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "clientId" && value ? { buyerName: "" } : {}),
+    }));
+  };
+
+  const handleEditCancel = () => {
+    setEditingSaleId(null);
+    setEditValues({
+      saleDate: selectedDate,
+      traysSold: "",
+      unitPrice: "",
+      clientId: "",
+      buyerName: "",
+    });
+  };
+
+  const handleEditSubmit = async (saleId: number) => {
+    if (readonly) return;
+
+    const editTraysSold = Number(editValues.traysSold);
+    const editUnitPrice = Number(editValues.unitPrice);
+    if (!editValues.saleDate || editTraysSold < 1 || editUnitPrice < 1) {
+      toast.error("Date, quantite et prix sont obligatoires");
+      return;
+    }
+
+    setIsUpdatingSale(true);
+    try {
+      const previousSale = [...salesList, ...recentSalesList].find((sale) => sale.id === saleId);
+      const previousDate = previousSale?.saleDate ?? selectedDate;
+      const res = await fetch(`/api/sales/${saleId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleDate: editValues.saleDate,
+          traysSold: editTraysSold,
+          unitPrice: editUnitPrice,
+          clientId: editValues.clientId ? Number(editValues.clientId) : null,
+          buyerName: editValues.clientId ? null : editValues.buyerName || null,
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        if (res.status === 409 && error.existingSale) {
+          toast.warning(`${describeSale(error.existingSale)} Modifiez la vente existante.`);
+          handleEditStart(error.existingSale);
+          return;
+        }
+        throw new Error(error.error ?? "Erreur serveur");
+      }
+
+      const { sale } = await res.json();
+      toast.success("Vente modifiee");
+      setEditingSaleId(null);
+      revalidateSalesDependents([previousDate, sale.saleDate]);
+      mutate(expensesKey);
+      if (sale.saleDate !== selectedDate) {
+        setSelectedDate(sale.saleDate);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erreur");
+    } finally {
+      setIsUpdatingSale(false);
+    }
+  };
+
   const handleDelete = async (saleId: number) => {
     try {
       const res = await fetch(`/api/sales/${saleId}`, { method: "DELETE" });
       if (!res.ok) throw new Error((await res.json()).error ?? "Erreur serveur");
       toast.success("Vente supprimée");
       setDeleteConfirmId(null);
-      mutate(salesKey);
+      revalidateSalesDependents([selectedDate]);
       mutate(expensesKey);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur");
@@ -217,6 +342,35 @@ export default function VentesPage() {
         <DateNavigator selectedDate={selectedDate} onChange={setSelectedDate} />
 
         <SalesMetrics totalTrays={totalTrays} totalSalesAmount={totalSalesAmount} netAmount={netAmount} />
+
+        {existingSaleForDate && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    Une vente existe deja pour cette date
+                  </p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {describeSale(existingSaleForDate)} Une seule vente est autorisee par date.
+                  </p>
+                </div>
+              </div>
+              {!readonly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                  onClick={() => handleEditStart(existingSaleForDate)}
+                >
+                  Modifier
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Formulaire nouvelle vente */}
         {!readonly && (
@@ -387,10 +541,43 @@ export default function VentesPage() {
         )}
 
         <SalesList
+          title="Ventes du jour"
+          emptyMessage="Aucune vente pour cette journee"
           sales={salesList}
           isLoading={isLoadingSales}
+          canEdit={!readonly}
           isAdmin={userIsAdmin}
+          clients={clients}
+          editingSaleId={editingSaleId}
+          editValues={editValues}
+          isUpdating={isUpdatingSale}
           deleteConfirmId={deleteConfirmId}
+          onEditStart={handleEditStart}
+          onEditChange={handleEditChange}
+          onEditSubmit={handleEditSubmit}
+          onEditCancel={handleEditCancel}
+          onDeleteRequest={setDeleteConfirmId}
+          onDeleteConfirm={handleDelete}
+          onDeleteCancel={() => setDeleteConfirmId(null)}
+        />
+
+        <SalesList
+          title="Historique des ventes"
+          emptyMessage="Aucune vente enregistree"
+          showDate
+          sales={recentSalesList}
+          isLoading={isLoadingRecentSales}
+          canEdit={!readonly}
+          isAdmin={userIsAdmin}
+          clients={clients}
+          editingSaleId={editingSaleId}
+          editValues={editValues}
+          isUpdating={isUpdatingSale}
+          deleteConfirmId={deleteConfirmId}
+          onEditStart={handleEditStart}
+          onEditChange={handleEditChange}
+          onEditSubmit={handleEditSubmit}
+          onEditCancel={handleEditCancel}
           onDeleteRequest={setDeleteConfirmId}
           onDeleteConfirm={handleDelete}
           onDeleteCancel={() => setDeleteConfirmId(null)}

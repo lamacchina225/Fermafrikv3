@@ -21,7 +21,7 @@ const mockDb = {
     buildings: { findFirst: vi.fn(), findMany: vi.fn() },
     cycles: { findFirst: vi.fn(), findMany: vi.fn() },
     dailyRecords: { findFirst: vi.fn(), findMany: vi.fn() },
-    sales: { findMany: vi.fn() },
+    sales: { findFirst: vi.fn(), findMany: vi.fn() },
     expenses: { findFirst: vi.fn(), findMany: vi.fn() },
     clients: { findFirst: vi.fn(), findMany: vi.fn() },
     settings: { findMany: vi.fn() },

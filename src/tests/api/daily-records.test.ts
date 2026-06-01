@@ -125,18 +125,12 @@ describe("POST /api/daily-records", () => {
     );
   });
 
-  it("met a jour si une saisie existe deja pour ce jour", async () => {
+  it("retourne 409 si une saisie existe deja pour ce jour sans recordId", async () => {
     mockAuth.mockResolvedValueOnce({ user: { id: "1", role: "admin", name: "admin", farmId: "1" } } as never);
-    const update = vi.fn().mockReturnValue({
-      set: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValueOnce(undefined),
-      }),
-    });
 
     (mockDb.transaction as Mock).mockImplementationOnce(async (callback) =>
       callback({
         ...mockDb,
-        update,
         query: {
           ...mockDb.query,
           dailyRecords: { findFirst: vi.fn().mockResolvedValueOnce({ id: 10, cycleId: 1, buildingId: 1, recordDate: "2026-03-31" }) },
@@ -146,10 +140,10 @@ describe("POST /api/daily-records", () => {
     );
 
     const res = await POST(makePostRequest(validPayload), ctx);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
     const json = await res.json();
-    expect(json.updated).toBe(true);
-    expect(json.id).toBe(10);
+    expect(json.error).toContain("existe deja");
+    expect(json.existingRecord.id).toBe(10);
   });
 
   it("met a jour une saisie ciblee par recordId et sa depense liee", async () => {

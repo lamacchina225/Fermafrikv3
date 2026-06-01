@@ -180,9 +180,22 @@ export default function SaisiePage() {
 
   const currentMortalityValue = Number(watch("mortalityCount") ?? 0);
   const currentLivingHensValue = Number(watch("livingHensCount") ?? 0);
+  const currentRecordDate = watch("recordDate");
   const currentFeedType = watch("feedType");
   const currentExpenseCategory = watch("expenseCategory");
   const previousMortality = editingRecord?.mortalityCount ?? 0;
+
+  const duplicateCheckKey = currentRecordDate
+    ? `/api/daily-records?activeCycle=true&fromDate=${currentRecordDate}&toDate=${currentRecordDate}&limit=1&offset=0`
+    : null;
+
+  const { data: duplicateCheckData } = useSWR<{
+    records: RecentRecord[];
+    pagination: { total: number; limit: number; offset: number };
+  }>(duplicateCheckKey, fetcher, { revalidateOnFocus: false });
+
+  const duplicateRecord =
+    duplicateCheckData?.records.find((record) => record.id !== editingRecordId) ?? null;
 
   const effectifAvantSaisie = useMemo(() => {
     if (!buildingInfo) return 0;
@@ -208,6 +221,7 @@ export default function SaisiePage() {
 
   const refreshHistory = () => {
     mutate(historyKey);
+    if (duplicateCheckKey) mutate(duplicateCheckKey);
   };
 
   const handleDelete = async (id: number) => {
@@ -234,6 +248,10 @@ export default function SaisiePage() {
     }
     if (!buildingInfo) {
       toast.error("Aucun batiment actif trouve");
+      return;
+    }
+    if (!editingRecordId && duplicateRecord) {
+      toast.warning("Une saisie existe deja pour cette date. Ouvrez-la en modification.");
       return;
     }
 
@@ -374,6 +392,35 @@ export default function SaisiePage() {
                 disabled={readonly}
               />
             </div>
+
+            {duplicateRecord && !editingRecordId && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900">
+                        Une saisie existe deja pour cette date
+                      </p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Une seule saisie est autorisee par date. Modifiez la saisie existante pour eviter les doublons.
+                      </p>
+                    </div>
+                  </div>
+                  {!readonly && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                      onClick={() => handleEditSetup(duplicateRecord)}
+                    >
+                      Modifier
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {sections.map((section) => {

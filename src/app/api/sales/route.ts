@@ -110,6 +110,20 @@ async function handlePost(req: NextRequest, ctx: AuthContext) {
     const body = await req.json();
     const data = saleSchema.parse(body);
 
+    const existingSale = await db.query.sales.findFirst({
+      where: and(eq(sales.farmId, ctx.farmId), eq(sales.saleDate, data.saleDate)),
+    });
+
+    if (existingSale) {
+      return NextResponse.json(
+        {
+          error: "Une vente existe deja pour cette date. Modifiez la vente existante au lieu d'en creer une nouvelle.",
+          existingSale,
+        },
+        { status: 409 }
+      );
+    }
+
     const totalAmount = data.traysSold * data.unitPrice;
 
     const inserted = await db

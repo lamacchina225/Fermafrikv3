@@ -257,35 +257,11 @@ async function handlePost(req: NextRequest, ctx: AuthContext) {
       });
 
       if (existing) {
-        await tx
-          .update(dailyRecords)
-          .set({
-            cycleId: data.cycleId,
-            buildingId: data.buildingId,
-            recordDate: data.recordDate,
-            eggsCollected: data.eggsCollected,
-            eggsBroken: data.eggsBroken,
-            mortalityCount: data.mortalityCount,
-            mortalityCause: data.mortalityCause,
-            feedQuantityKg: data.feedQuantityKg?.toString(),
-            feedType: data.feedType,
-            feedCost: data.feedCost?.toString(),
-            updatedAt: new Date(),
-          })
-          .where(eq(dailyRecords.id, existing.id));
-
-        await syncFeedExpense(tx, ctx, data, {
-          cycleId: existing.cycleId,
-          buildingId: existing.buildingId,
-          recordDate: existing.recordDate,
-        });
-        await syncLinkedExpense(tx, ctx, existing.id, {
-          cycleId: data.cycleId,
-          buildingId: data.buildingId,
-          recordDate: data.recordDate,
-          linkedExpense: data.linkedExpense,
-        });
-        return { success: true, id: existing.id, updated: true } as const;
+        return {
+          error: "Une saisie existe deja pour cette date. Modifiez la saisie existante au lieu d'en creer une nouvelle.",
+          status: 409,
+          existingRecord: existing,
+        } as const;
       }
 
       const inserted = await tx
@@ -319,7 +295,10 @@ async function handlePost(req: NextRequest, ctx: AuthContext) {
     });
 
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return NextResponse.json(
+        { error: result.error, existingRecord: "existingRecord" in result ? result.existingRecord : undefined },
+        { status: result.status }
+      );
     }
 
     return NextResponse.json(result);
