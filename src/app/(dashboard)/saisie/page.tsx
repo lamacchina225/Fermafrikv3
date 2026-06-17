@@ -66,10 +66,18 @@ interface RecentRecord {
 interface BuildingInfo {
   buildingId: number;
   cycleId: number;
+  cycleStartDate: string;
   buildingName: string;
   initialCount: number;
   totalMortality: number;
   effectifVivant: number;
+}
+
+interface ProductionPeriod {
+  value: string;
+  fromDate: string;
+  toDate: string;
+  label: string;
 }
 
 const sections = [
@@ -91,6 +99,48 @@ const fetcher = (url: string) => fetch(url).then((response) => response.json());
 const INFO_KEY = "/api/daily-records?info=true";
 const HISTORY_PAGE_SIZE = 30;
 
+function getCurrentProductionPeriod() {
+  const today = new Date();
+  const start =
+    today.getDate() >= 18
+      ? new Date(today.getFullYear(), today.getMonth(), 18)
+      : new Date(today.getFullYear(), today.getMonth() - 1, 18);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 17);
+
+  return {
+    fromDate: format(start, "yyyy-MM-dd"),
+    toDate: format(end, "yyyy-MM-dd"),
+  };
+}
+
+function getProductionPeriodsSince(cycleStartDate: string, currentPeriod: { fromDate: string; toDate: string }) {
+  const periods: ProductionPeriod[] = [];
+  const cycleStart = new Date(`${cycleStartDate}T00:00:00`);
+  const currentStart = new Date(`${currentPeriod.fromDate}T00:00:00`);
+
+  let start = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), 18);
+  if (cycleStart.getDate() < 18) {
+    start = new Date(cycleStart.getFullYear(), cycleStart.getMonth() - 1, 18);
+  }
+
+  while (start <= currentStart) {
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 17);
+    const fromDate = format(start, "yyyy-MM-dd");
+    const toDate = format(end, "yyyy-MM-dd");
+    const label = `${format(start, "d MMM", { locale: fr })} - ${format(end, "d MMM yyyy", { locale: fr })}`;
+
+    periods.push({
+      value: fromDate,
+      fromDate,
+      toDate,
+      label: fromDate === currentPeriod.fromDate ? `${label} (en cours)` : label,
+    });
+    start = new Date(start.getFullYear(), start.getMonth() + 1, 18);
+  }
+
+  return periods.reverse();
+}
+
 export default function SaisiePage() {
   const { data: session, status } = useSession();
   const [openSections, setOpenSections] = useState<string[]>(["oeufs"]);
@@ -99,10 +149,11 @@ export default function SaisiePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE);
-  const [searchFromDate, setSearchFromDate] = useState("");
-  const [searchToDate, setSearchToDate] = useState("");
-  const [appliedFromDate, setAppliedFromDate] = useState("");
-  const [appliedToDate, setAppliedToDate] = useState("");
+  const [currentProductionPeriod] = useState(() => getCurrentProductionPeriod());
+  const [searchFromDate, setSearchFromDate] = useState(currentProductionPeriod.fromDate);
+  const [searchToDate, setSearchToDate] = useState(currentProductionPeriod.toDate);
+  const [appliedFromDate, setAppliedFromDate] = useState(currentProductionPeriod.fromDate);
+  const [appliedToDate, setAppliedToDate] = useState(currentProductionPeriod.toDate);
 
   const readonly = !canWrite(session?.user?.role);
 
@@ -111,6 +162,20 @@ export default function SaisiePage() {
     fetcher,
     { revalidateOnFocus: false }
   );
+
+  const productionPeriods = useMemo(() => {
+    if (!buildingInfo?.cycleStartDate) {
+      return [
+        {
+          value: currentProductionPeriod.fromDate,
+          ...currentProductionPeriod,
+          label: "Mois en cours",
+        },
+      ];
+    }
+
+    return getProductionPeriodsSince(buildingInfo.cycleStartDate, currentProductionPeriod);
+  }, [buildingInfo?.cycleStartDate, currentProductionPeriod]);
 
   const historyKey = useMemo(() => {
     const params = new URLSearchParams({
@@ -314,11 +379,22 @@ export default function SaisiePage() {
     setAppliedToDate(searchToDate);
   };
 
-  const clearHistoryFilters = () => {
-    setSearchFromDate("");
-    setSearchToDate("");
-    setAppliedFromDate("");
-    setAppliedToDate("");
+  const selectHistoryPeriod = (fromDate: string) => {
+    const period = productionPeriods.find((item) => item.fromDate === fromDate);
+    if (!period) return;
+
+    setSearchFromDate(period.fromDate);
+    setSearchToDate(period.toDate);
+    setAppliedFromDate(period.fromDate);
+    setAppliedToDate(period.toDate);
+    setHistoryLimit(HISTORY_PAGE_SIZE);
+  };
+
+  const showCurrentProductionMonth = () => {
+    setSearchFromDate(currentProductionPeriod.fromDate);
+    setSearchToDate(currentProductionPeriod.toDate);
+    setAppliedFromDate(currentProductionPeriod.fromDate);
+    setAppliedToDate(currentProductionPeriod.toDate);
     setHistoryLimit(HISTORY_PAGE_SIZE);
   };
 
@@ -640,7 +716,27 @@ export default function SaisiePage() {
         </form>
 
         <div className="mt-8 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-xs text-slate-500">
+            Periode affichee : du{" "}
+            {format(new Date(`${appliedFromDate}T00:00:00`), "d MMMM yyyy", { locale: fr })} au{" "}
+            {format(new Date(`${appliedToDate}T00:00:00`), "d MMMM yyyy", { locale: fr })}.
+          </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="historyPeriod">Periode de production</Label>
+              <Select value={appliedFromDate} onValueChange={selectHistoryPeriod}>
+                <SelectTrigger id="historyPeriod">
+                  <SelectValue placeholder="Choisir une periode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {productionPeriods.map((period) => (
+                    <SelectItem key={period.value} value={period.value}>
+                      {period.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="historyFromDate">Du</Label>
               <Input
@@ -663,8 +759,8 @@ export default function SaisiePage() {
               Rechercher
             </Button>
             {(appliedFromDate || appliedToDate || searchFromDate || searchToDate) && (
-              <Button type="button" variant="outline" onClick={clearHistoryFilters} className="sm:w-auto">
-                Reinitialiser
+              <Button type="button" variant="outline" onClick={showCurrentProductionMonth} className="sm:w-auto">
+                Mois en cours
               </Button>
             )}
           </div>

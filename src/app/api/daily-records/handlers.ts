@@ -177,6 +177,7 @@ export async function handleInfo(farmId: number) {
     buildingId: building.id,
     buildingName: building.name,
     cycleId: cycle.id,
+    cycleStartDate: cycle.startDate,
     initialCount: cycle.initialCount,
     totalMortality,
     effectifVivant,
